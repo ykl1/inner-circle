@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 // Debounce delay for reconnection (wait for stable connection)
-const RECONNECT_DEBOUNCE_MS = 1500;
+const RECONNECT_DEBOUNCE_MS = 500;
 
 /**
  * Custom hook for Socket.io connection
