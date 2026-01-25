@@ -10,10 +10,21 @@ EC2_KEY="${EC2_KEY:-~/.ssh/your-key.pem}"
 
 echo "=== Deploying to EC2 ==="
 ssh -i "$EC2_KEY" "$EC2_USER@$EC2_HOST" << 'EOF'
-  cd ~/inner-circle/server
+  cd ~/inner-circle
   git pull origin main
+  
+  # Build frontend
+  cd client
+  npm install
+  npm run build
+  rm -rf ../server/public
+  cp -r dist ../server/public
+  
+  # Restart server
+  cd ../server
   npm install --production
   pm2 restart inner-circle-server
 EOF
 
 echo "=== Deploy Complete ==="
+echo "Game available at: http://$EC2_HOST:3001"

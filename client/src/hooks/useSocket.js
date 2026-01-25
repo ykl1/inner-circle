@@ -1,9 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-// Use the same hostname as the page, but with port 3001 for the socket server
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 
-  `http://${window.location.hostname}:3001`;
+// Socket URL: use env var, or same origin (when frontend is served from backend)
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 /**
  * Custom hook for Socket.io connection

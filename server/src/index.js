@@ -1,14 +1,19 @@
 /**
  * Inner Circle Game Server
- * Express + Socket.io
+ * Express + Socket.io + Static Frontend
  */
 
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { initSocketHandlers } from './socketHandlers.js';
 import { categories } from './cards.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 3001;
 
@@ -16,6 +21,10 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve static frontend files from /public
+const publicPath = join(__dirname, '..', 'public');
+app.use(express.static(publicPath));
 
 // Create HTTP server
 const httpServer = createServer(app);
@@ -36,6 +45,15 @@ app.get('/health', (req, res) => {
 // Get available categories
 app.get('/api/categories', (req, res) => {
   res.json(categories);
+});
+
+// Serve index.html for all non-API routes (SPA support)
+app.get('*', (req, res, next) => {
+  // Skip API routes and socket.io
+  if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path === '/health') {
+    return next();
+  }
+  res.sendFile(join(publicPath, 'index.html'));
 });
 
 // Initialize socket handlers

@@ -18,7 +18,17 @@ sudo yum install -y git 2>/dev/null || sudo apt-get install -y git
 echo "=== Cloning Repository ==="
 cd ~
 git clone https://github.com/YOUR_USERNAME/inner-circle.git
-cd inner-circle/server
+cd inner-circle
+
+echo "=== Building Frontend ==="
+cd client
+npm install
+npm run build
+cp -r dist ../server/public
+cd ..
+
+echo "=== Installing Server Dependencies ==="
+cd server
 npm install --production
 
 echo "=== Starting Server with PM2 ==="
@@ -28,7 +38,8 @@ pm2 startup
 
 echo ""
 echo "=== Setup Complete ==="
-echo "Server is running on port 3001"
+echo "Server + Frontend running on port 3001"
+echo "Access the game at: http://YOUR_EC2_IP:3001"
 echo ""
 echo "Don't forget to:"
 echo "1. Update the git remote URL if needed"

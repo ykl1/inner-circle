@@ -3,41 +3,23 @@
 ## Architecture
 
 ```
-┌─────────────────┐         ┌─────────────────┐
-│     Vercel      │  WS     │   AWS EC2       │
-│   (Frontend)    │◄───────►│   (Backend)     │
-│   React/Vite    │         │   Socket.io     │
-└─────────────────┘         └─────────────────┘
-     Auto-deploy              Auto-deploy
-     on git push              on git push
+┌─────────────────────────────────────┐
+│           AWS EC2 t3.micro          │
+│  ┌─────────────┐  ┌──────────────┐  │
+│  │   Frontend  │  │   Backend    │  │
+│  │   (static)  │  │  Socket.io   │  │
+│  └─────────────┴──┴──────────────┘  │
+│         Express serves both         │
+│           Port 3001                 │
+└─────────────────────────────────────┘
+        Auto-deploy on git push
 ```
 
----
-
-## 1. Frontend Deployment (Vercel)
-
-### Initial Setup
-
-1. Go to [vercel.com](https://vercel.com) and sign in with GitHub
-2. Click "Add New Project"
-3. Import your `inner-circle` repository
-4. Configure:
-   - **Root Directory**: `client`
-   - **Framework Preset**: Vite
-5. Add Environment Variable:
-   - **Name**: `VITE_SOCKET_URL`
-   - **Value**: `http://YOUR_EC2_IP:3001` (update after EC2 setup)
-6. Click "Deploy"
-
-### Updating Frontend
-
-Just push to `main` — Vercel auto-deploys in ~30 seconds.
+**Game URL:** `http://YOUR_EC2_IP:3001`
 
 ---
 
-## 2. Backend Deployment (AWS EC2)
-
-### A. Launch EC2 Instance
+## 1. Launch EC2 Instance
 
 1. Go to AWS Console → EC2 → Launch Instance
 2. Configure:
@@ -45,26 +27,23 @@ Just push to `main` — Vercel auto-deploys in ~30 seconds.
    - **AMI**: Amazon Linux 2023 (free tier)
    - **Instance type**: t3.micro (free tier eligible)
    - **Key pair**: Create or select existing
-   - **Security group**: Create with rules:
+   - **Security group**: 
      - SSH (22) from your IP
-     - Custom TCP (3001) from anywhere (0.0.0.0/0)
+     - Custom TCP (3001) from anywhere (0.0.0.0/0 IPv4 + ::/0 IPv6)
 3. Launch and note the public IP
 
-### B. Initial Server Setup
+---
 
-SSH into your instance:
+## 2. Initial Server Setup
+
+### SSH into your instance:
 
 ```bash
+chmod 400 your-key.pem  # First time only
 ssh -i your-key.pem ec2-user@YOUR_EC2_IP
 ```
 
-Run the setup script:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/inner-circle/main/server/scripts/ec2-setup.sh | bash
-```
-
-Or manually:
+### Install dependencies and deploy:
 
 ```bash
 # Install Node.js 20
@@ -74,37 +53,44 @@ sudo yum install -y nodejs git
 # Install PM2
 sudo npm install -g pm2
 
-# Clone and start
+# Clone repository
 cd ~
 git clone https://github.com/YOUR_USERNAME/inner-circle.git
-cd inner-circle/server
+cd inner-circle
+
+# Build frontend
+cd client
+npm install
+npm run build
+cp -r dist ../server/public
+cd ..
+
+# Start server
+cd server
 npm install --production
 pm2 start ecosystem.config.cjs --env production
 pm2 save
-pm2 startup  # Follow the printed command
+
+# Auto-start on reboot
+pm2 startup
+# Run the command it outputs (starts with 'sudo env...')
 ```
 
-### C. Setup GitHub Actions (Auto-Deploy)
+**Your game is now live at:** `http://YOUR_EC2_IP:3001`
+
+---
+
+## 3. Setup Auto-Deploy (GitHub Actions)
 
 Add these secrets to your GitHub repo (Settings → Secrets → Actions):
 
 | Secret | Value |
 |--------|-------|
-| `EC2_HOST` | Your EC2 public IP (e.g., `54.123.45.67`) |
-| `EC2_USERNAME` | `ec2-user` (Amazon Linux) or `ubuntu` (Ubuntu) |
-| `EC2_SSH_KEY` | Contents of your `.pem` private key file |
+| `EC2_HOST` | Your EC2 public IP (e.g., `3.143.254.122`) |
+| `EC2_USERNAME` | `ec2-user` |
+| `EC2_SSH_KEY` | Full contents of your `.pem` private key file |
 
-Now every push to `main` that changes `server/` auto-deploys!
-
----
-
-## 3. Connect Frontend to Backend
-
-After EC2 is running, update Vercel environment variable:
-
-1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables
-2. Update `VITE_SOCKET_URL` to `http://YOUR_EC2_IP:3001`
-3. Redeploy (or push a commit)
+Now every push to `main` auto-deploys both frontend and backend!
 
 ---
 
@@ -119,8 +105,14 @@ git commit -m "your changes"
 git push
 ```
 
-- Frontend changes → Vercel auto-deploys (~30s)
-- Backend changes → GitHub Actions deploys to EC2 (~30s)
+GitHub Actions will:
+1. SSH into EC2
+2. Pull latest code
+3. Build frontend
+4. Copy to server/public
+5. Restart server
+
+**Deploy time:** ~60 seconds
 
 ---
 
@@ -138,30 +130,43 @@ pm2 restart inner-circle-server
 # Check status
 pm2 status
 
-# Manual pull and restart
-cd ~/inner-circle/server && git pull && pm2 restart inner-circle-server
+# Manual deploy (if needed)
+cd ~/inner-circle
+git pull origin main
+cd client && npm install && npm run build && cp -r dist ../server/public
+cd ../server && npm install --production && pm2 restart inner-circle-server
 ```
 
 ### Locally
 
 ```bash
-# Manual deploy (if GitHub Actions not set up)
-./deploy.sh
+# Build and test production version locally
+npm run build
+npm start
+# Visit http://localhost:3001
+
+# Manual deploy to EC2 (without GitHub Actions)
+EC2_HOST=YOUR_IP EC2_KEY=~/.ssh/your-key.pem ./deploy.sh
 ```
 
 ---
 
 ## Troubleshooting
 
-### Can't connect to server from frontend
-- Check EC2 security group allows port 3001
-- Check `VITE_SOCKET_URL` is correct in Vercel
+### Can't access the game
+- Check EC2 security group allows port 3001 (both IPv4 and IPv6)
 - Check server is running: `pm2 status`
+- Check logs: `pm2 logs`
 
 ### GitHub Actions failing
 - Verify all 3 secrets are set correctly
-- Check EC2_SSH_KEY is the full private key (including BEGIN/END lines)
+- `EC2_SSH_KEY` must be the full private key (including `-----BEGIN...` and `-----END...` lines)
+- Check Actions tab for error details
 
 ### Server crashes after deploy
-- Check logs: `pm2 logs`
-- Check for syntax errors in recent changes
+- SSH in and check logs: `pm2 logs`
+- Look for syntax errors or missing dependencies
+
+### Frontend not updating
+- Make sure `server/public` contains the latest build
+- Try: `pm2 restart inner-circle-server`
