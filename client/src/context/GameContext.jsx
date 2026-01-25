@@ -42,6 +42,7 @@ export function GameProvider({ children }) {
   const [categories, setCategories] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isRejoining, setIsRejoining] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const rejoinAttempted = useRef(false);
   
   const handleRoomUpdate = useCallback((data) => {
@@ -53,11 +54,85 @@ export function GameProvider({ children }) {
     console.log('Phase changed to:', data.phase);
   }, []);
   
-  const socket = useSocket(handleRoomUpdate, handlePhaseChange);
+  // Store socket ref for use in callbacks
+  const socketRef = useRef(null);
   
-  // Store socket in ref to avoid dependency issues
-  const socketRef = useRef(socket);
-  socketRef.current = socket;
+  /**
+   * Rejoin with retries
+   * @param {number} maxRetries - Maximum number of retry attempts
+   * @param {number} attempt - Current attempt number
+   */
+  const rejoinWithRetries = useCallback(async (maxRetries = 3, attempt = 1) => {
+    const session = getSession();
+    if (!session?.roomId || !session?.playerName) {
+      return { success: false, error: 'No session' };
+    }
+    
+    try {
+      const result = await socketRef.current.rejoinRoom(session.roomId, session.playerName);
+      setPlayerName(session.playerName);
+      setCategories(result.categories || []);
+      setIsConnected(true);
+      console.log(`Rejoin successful on attempt ${attempt}`);
+      return { success: true };
+    } catch (err) {
+      console.log(`Rejoin attempt ${attempt} failed:`, err.message);
+      
+      // Check if it's a "room not found" error (game ended)
+      if (err.message.includes('not found') || err.message.includes('Could not rejoin')) {
+        return { success: false, error: 'room_not_found' };
+      }
+      
+      // Retry with increasing delay
+      if (attempt < maxRetries) {
+        const delay = attempt * 1000; // 1s, 2s, 3s
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return rejoinWithRetries(maxRetries, attempt + 1);
+      }
+      
+      return { success: false, error: 'max_retries' };
+    }
+  }, []);
+  
+  /**
+   * Handle reconnection after mobile app switch
+   */
+  const handleReconnect = useCallback(async () => {
+    const session = getSession();
+    if (!session?.roomId || !session?.playerName) {
+      console.log('No session to rejoin on reconnect');
+      return;
+    }
+    
+    console.log('Reconnection detected, syncing state...');
+    setIsSyncing(true);
+    
+    try {
+      const result = await rejoinWithRetries(3);
+      
+      if (!result.success) {
+        if (result.error === 'room_not_found') {
+          console.log('Room no longer exists, clearing session');
+          clearSession();
+          setGameState(null);
+          setIsConnected(false);
+          setError('The game has ended while you were away.');
+        } else {
+          setError('Failed to sync. Please refresh the page.');
+        }
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [rejoinWithRetries]);
+  
+  const socket = useSocket(handleRoomUpdate, handlePhaseChange, handleReconnect);
+  
+  // Update socket ref when socket changes
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
   
   // Try to rejoin on mount
   useEffect(() => {
@@ -81,11 +156,11 @@ export function GameProvider({ children }) {
             connectionTimeout
           ]);
           
-          const result = await socketRef.current.rejoinRoom(session.roomId, session.playerName);
-          setPlayerName(session.playerName);
-          setCategories(result.categories || []);
-          setIsConnected(true);
-          console.log('Rejoined room successfully');
+          const result = await rejoinWithRetries(3);
+          if (!result.success) {
+            console.log('Failed to rejoin, clearing session');
+            clearSession();
+          }
         } catch (err) {
           console.log('Failed to rejoin, clearing session:', err.message);
           clearSession();
@@ -202,6 +277,7 @@ export function GameProvider({ children }) {
     categories,
     isConnected,
     isRejoining,
+    isSyncing,
     
     // Actions
     createRoom: handleCreateRoom,

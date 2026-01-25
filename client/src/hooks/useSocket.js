@@ -4,12 +4,17 @@ import { io } from 'socket.io-client';
 // Socket URL: use env var, or same origin (when frontend is served from backend)
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
+// Debounce delay for reconnection (wait for stable connection)
+const RECONNECT_DEBOUNCE_MS = 1500;
+
 /**
  * Custom hook for Socket.io connection
  */
-export function useSocket(onRoomUpdate, onPhaseChange) {
+export function useSocket(onRoomUpdate, onPhaseChange, onReconnect) {
   const socketRef = useRef(null);
   const onConnectCallbacks = useRef([]);
+  const isFirstConnect = useRef(true);
+  const reconnectDebounceTimer = useRef(null);
   
   useEffect(() => {
     // Create socket connection
@@ -21,13 +26,34 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
     
     socket.on('connect', () => {
       console.log('Connected to server:', socket.id);
-      // Fire any waiting callbacks
+      
+      // Fire any waiting callbacks (for initial connection)
       onConnectCallbacks.current.forEach(cb => cb());
       onConnectCallbacks.current = [];
+      
+      // Handle reconnection (not the first connect)
+      if (isFirstConnect.current) {
+        isFirstConnect.current = false;
+      } else {
+        // Debounce reconnection to wait for stable connection
+        if (reconnectDebounceTimer.current) {
+          clearTimeout(reconnectDebounceTimer.current);
+        }
+        
+        reconnectDebounceTimer.current = setTimeout(() => {
+          console.log('Stable reconnection detected, triggering sync...');
+          onReconnect?.();
+        }, RECONNECT_DEBOUNCE_MS);
+      }
     });
     
     socket.on('disconnect', () => {
       console.log('Disconnected from server');
+      // Clear debounce timer on disconnect (connection not stable yet)
+      if (reconnectDebounceTimer.current) {
+        clearTimeout(reconnectDebounceTimer.current);
+        reconnectDebounceTimer.current = null;
+      }
     });
     
     socket.on('room_state_update', (data) => {
@@ -45,6 +71,9 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
     });
     
     return () => {
+      if (reconnectDebounceTimer.current) {
+        clearTimeout(reconnectDebounceTimer.current);
+      }
       socket.disconnect();
     };
   }, []);

@@ -10,6 +10,20 @@ import { RoundResultsScreen } from './screens/RoundResultsScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 
 /**
+ * Syncing overlay - shows when reconnecting after mobile app switch
+ */
+function SyncingOverlay() {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-game-dark border border-white/20 rounded-xl px-6 py-4 flex items-center gap-3">
+        <div className="animate-spin text-xl">🔄</div>
+        <div className="text-white">Syncing...</div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Wrapper for in-game screens with header
  */
 function GameLayout({ children }) {
@@ -24,9 +38,9 @@ function GameLayout({ children }) {
 }
 
 function App() {
-  const { gameState, isRejoining } = useGame();
+  const { gameState, isRejoining, isSyncing } = useGame();
   
-  // Show loading while attempting to rejoin
+  // Show loading while attempting to rejoin (initial page load)
   if (isRejoining) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -48,7 +62,12 @@ function App() {
   
   // Game over doesn't need the header (has its own back button)
   if (phase === PHASES.GAME_OVER) {
-    return <GameOverScreen />;
+    return (
+      <>
+        {isSyncing && <SyncingOverlay />}
+        <GameOverScreen />
+      </>
+    );
   }
   
   // All other phases get the header
@@ -83,7 +102,12 @@ function App() {
       );
   }
   
-  return <GameLayout>{screen}</GameLayout>;
+  return (
+    <>
+      {isSyncing && <SyncingOverlay />}
+      <GameLayout>{screen}</GameLayout>
+    </>
+  );
 }
 
 export default App;
