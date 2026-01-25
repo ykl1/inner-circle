@@ -3,15 +3,46 @@
  */
 
 /**
+ * List of inappropriate words/patterns to avoid in room codes
+ * Includes common curse words and offensive terms (4-letter patterns)
+ */
+const BAD_WORDS = [
+  'FUCK', 'SHIT', 'DAMN', 'HELL', 'ASS', 'ARSE', 'CUNT', 'DICK', 'COCK',
+  'PISS', 'SLUT', 'TWAT', 'WANK', 'CRAP', 'DUMB', 'HOMO', 'SPIC', 'KIKE',
+  'NAZI', 'PORN', 'RAPE', 'TITS', 'BOOB', 'NUDE', 'POOP', 'FART', 'BUTT',
+  'BICH', 'BTCH', 'FCUK', 'SHYT', 'SUCK', 'BLOW', 'JERK', 'PRIK', 'PUSS',
+  'DYKE', 'FAGS', 'GOOK', 'JIZZ', 'KNOB', 'MUFF', 'NIPS', 'ORGY', 'PHUC',
+  'SHAT', 'SPAZ', 'TARD', 'TURD', 'WHRE', 'NEGRO', 'NEGR'
+];
+
+/**
+ * Check if a code contains any bad words
+ * @param {string} code - The code to check
+ * @returns {boolean} True if code contains bad word
+ */
+function containsBadWord(code) {
+  return BAD_WORDS.some(bad => code.includes(bad));
+}
+
+/**
  * Generate a random 4-character room code
+ * Ensures no inappropriate words are generated
  * @returns {string} Room code (uppercase letters)
  */
 export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Excluded I and O to avoid confusion
   let code = '';
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  let attempts = 0;
+  const maxAttempts = 100;
+  
+  do {
+    code = '';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    attempts++;
+  } while (containsBadWord(code) && attempts < maxAttempts);
+  
   return code;
 }
 

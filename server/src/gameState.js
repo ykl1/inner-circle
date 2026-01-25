@@ -41,7 +41,7 @@ export function createRoom(founderId, founderName) {
     // Players
     players: [{
       id: founderId,
-      name: founderName,
+      name: founderName.trim(),
       isFounder: true,
       isConnected: true
     }],
@@ -91,28 +91,37 @@ export function getRoom(roomId) {
  * @param {string} roomId 
  * @param {string} playerId - Socket ID
  * @param {string} playerName 
- * @returns {Object|null} Updated room or null if failed
+ * @returns {{ room: Object }|{ error: string }} Room or error
  */
 export function joinRoom(roomId, playerId, playerName) {
   const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.currentPhase !== PHASES.LOBBY) return null;
+  if (!room) return { error: 'Room not found' };
+  if (room.currentPhase !== PHASES.LOBBY) return { error: 'Game already started' };
   
-  // Check if player already exists (reconnect)
+  // Check if player already exists (reconnect by socket ID)
   const existingPlayer = room.players.find(p => p.id === playerId);
   if (existingPlayer) {
     existingPlayer.isConnected = true;
-    return room;
+    return { room };
+  }
+  
+  // Check for duplicate name (case-insensitive)
+  const normalizedName = playerName.trim().toLowerCase();
+  const duplicateName = room.players.find(
+    p => p.name.trim().toLowerCase() === normalizedName
+  );
+  if (duplicateName) {
+    return { error: 'Name already taken in this room' };
   }
   
   room.players.push({
     id: playerId,
-    name: playerName,
+    name: playerName.trim(),
     isFounder: false,
     isConnected: true
   });
   
-  return room;
+  return { room };
 }
 
 /**
@@ -608,8 +617,9 @@ export function rejoinRoom(roomId, newSocketId, playerName) {
   const room = rooms.get(roomId);
   if (!room) return null;
   
-  // Find player by name
-  const player = room.players.find(p => p.name === playerName);
+  // Find player by name (case-insensitive)
+  const normalizedName = playerName.trim().toLowerCase();
+  const player = room.players.find(p => p.name.trim().toLowerCase() === normalizedName);
   if (!player) return null;
   
   const oldPlayerId = player.id;

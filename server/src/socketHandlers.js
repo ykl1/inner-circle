@@ -61,13 +61,14 @@ export function initSocketHandlers(io) {
      */
     socket.on('join_room', ({ roomId, playerName }, callback) => {
       try {
-        const room = joinRoom(roomId.toUpperCase(), socket.id, playerName);
+        const result = joinRoom(roomId.toUpperCase(), socket.id, playerName);
         
-        if (!room) {
-          callback({ success: false, error: 'Room not found or game already started' });
+        if (result.error) {
+          callback({ success: false, error: result.error });
           return;
         }
         
+        const room = result.room;
         currentRoomId = room.roomId;
         socket.join(room.roomId);
         
