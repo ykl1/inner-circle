@@ -23,7 +23,7 @@ const httpServer = createServer(app);
 // Create Socket.io server
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: '*', // Allow all origins for development
     methods: ['GET', 'POST']
   }
 });
@@ -41,14 +41,15 @@ app.get('/api/categories', (req, res) => {
 // Initialize socket handlers
 initSocketHandlers(io);
 
-// Start server
-httpServer.listen(PORT, () => {
+// Start server on all interfaces (0.0.0.0) for network access
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════╗
 ║         INNER CIRCLE GAME SERVER          ║
 ╠═══════════════════════════════════════════╣
 ║  Server running on port ${PORT}              ║
 ║  Socket.io ready for connections          ║
+║  Accessible on local network              ║
 ╚═══════════════════════════════════════════╝
   `);
 });
