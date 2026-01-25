@@ -131,3 +131,4 @@ export function VotingScreen() {
     </div>
   );
 }
+
