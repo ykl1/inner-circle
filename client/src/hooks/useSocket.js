@@ -1,0 +1,168 @@
+import { useEffect, useRef, useCallback } from 'react';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+
+/**
+ * Custom hook for Socket.io connection
+ */
+export function useSocket(onRoomUpdate, onPhaseChange) {
+  const socketRef = useRef(null);
+  
+  useEffect(() => {
+    // Create socket connection
+    socketRef.current = io(SOCKET_URL, {
+      transports: ['websocket', 'polling']
+    });
+    
+    const socket = socketRef.current;
+    
+    socket.on('connect', () => {
+      console.log('Connected to server:', socket.id);
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+    });
+    
+    socket.on('room_state_update', (data) => {
+      console.log('Room state update:', data);
+      onRoomUpdate?.(data);
+    });
+    
+    socket.on('phase_change', (data) => {
+      console.log('Phase change:', data);
+      onPhaseChange?.(data);
+    });
+    
+    socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+    });
+    
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+  
+  // Create room
+  const createRoom = useCallback((playerName) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('create_room', { playerName }, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Join room
+  const joinRoom = useCallback((roomId, playerName) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('join_room', { roomId, playerName }, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Update settings
+  const updateSettings = useCallback((settings) => {
+    socketRef.current?.emit('update_settings', settings);
+  }, []);
+  
+  // Start game
+  const startGame = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('start_game', {}, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Submit flex selection
+  const submitFlex = useCallback((selectedCardIds) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('submit_flex', { selectedCardIds }, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Submit sabotage
+  const submitSabotage = useCallback((redCardId) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('submit_sabotage', { redCardId }, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Finish pitch
+  const finishPitch = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('finish_pitch', {}, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Cast vote
+  const castVote = useCallback((candidateId) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('cast_vote', { candidateId }, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Proceed from results
+  const proceedFromResults = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('proceed_from_results', {}, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  return {
+    socket: socketRef.current,
+    createRoom,
+    joinRoom,
+    updateSettings,
+    startGame,
+    submitFlex,
+    submitSabotage,
+    finishPitch,
+    castVote,
+    proceedFromResults
+  };
+}

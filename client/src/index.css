@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-game-dark text-white antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-6 py-3 rounded-xl font-bold transition-all duration-200 
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-game-purple hover:bg-purple-600 active:scale-95;
+  }
+  
+  .btn-success {
+    @apply btn bg-game-green hover:bg-green-600 active:scale-95;
+  }
+  
+  .btn-danger {
+    @apply btn bg-game-red hover:bg-red-600 active:scale-95;
+  }
+  
+  .card {
+    @apply bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20;
+  }
+  
+  .card-green {
+    @apply card border-game-green bg-green-500/20;
+  }
+  
+  .card-red {
+    @apply card border-game-red bg-red-500/20;
+  }
+  
+  .input {
+    @apply w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl
+           text-white placeholder-white/50 focus:outline-none focus:border-game-purple
+           focus:ring-2 focus:ring-game-purple/50;
+  }
+}
