@@ -90,3 +90,17 @@ inner-circle/
 - [x] Voting with automatic tie-break
 - [x] Multi-round progression
 - [x] Winners/Losers end screens
+- [x] Session persistence (survives browser refresh)
+- [x] Leave room functionality
+
+## Deployment
+
+See [DEPLOY.md](./DEPLOY.md) for full deployment guide.
+
+**Quick overview:**
+- **Frontend**: Vercel (auto-deploys on git push)
+- **Backend**: AWS EC2 t3.micro + PM2 (auto-deploys via GitHub Actions)
+
+```bash
+git push  # Deploys both frontend and backend automatically
+```
