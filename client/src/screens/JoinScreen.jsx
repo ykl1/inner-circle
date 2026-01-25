@@ -68,20 +68,48 @@ export function JoinScreen() {
         
         {/* Mode selection */}
         {!mode && (
-          <div className="space-y-4">
-            <button
-              onClick={() => setMode('create')}
-              className="btn-primary w-full text-lg"
-            >
-              Create Room
-            </button>
-            <button
-              onClick={() => setMode('join')}
-              className="btn bg-white/10 hover:bg-white/20 w-full text-lg"
-            >
-              Join Room
-            </button>
-          </div>
+          <>
+            <div className="space-y-4">
+              <button
+                onClick={() => setMode('create')}
+                className="btn-primary w-full text-lg"
+              >
+                Create Room
+              </button>
+              <button
+                onClick={() => setMode('join')}
+                className="btn bg-white/10 hover:bg-white/20 w-full text-lg"
+              >
+                Join Room
+              </button>
+            </div>
+            
+            {/* Game Rules */}
+            <div className="card bg-white/5 text-sm">
+              <h2 className="text-game-gold font-bold mb-3 text-center">How to Play</h2>
+              <div className="space-y-2 text-white/80">
+                <div className="flex gap-2">
+                  <span className="text-game-green">1.</span>
+                  <span><strong>Flex</strong> — Pick 2 strength cards to show off</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-game-red">2.</span>
+                  <span><strong>Sabotage</strong> — Secretly give a flaw card to a rival</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-game-purple">3.</span>
+                  <span><strong>Pitch</strong> — Present your 3-card hand (2 strengths + 1 flaw)</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-game-gold">4.</span>
+                  <span><strong>Vote</strong> — Judges pick who joins the Inner Circle</span>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-white/10 text-white/60 text-xs text-center">
+                👑 The Founder's vote breaks all ties
+              </div>
+            </div>
+          </>
         )}
         
         {/* Create room form */}

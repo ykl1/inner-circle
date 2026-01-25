@@ -4,7 +4,7 @@ import { useGame } from '../context/GameContext';
  * Game over screen - show winners and losers
  */
 export function GameOverScreen() {
-  const { gameState, categories } = useGame();
+  const { gameState, categories, leaveRoom } = useGame();
   
   const winners = gameState?.winners || [];
   const losers = gameState?.losers || [];
@@ -73,6 +73,14 @@ export function GameOverScreen() {
         <div className="mt-8 text-4xl animate-bounce">
           🎉
         </div>
+        
+        {/* Play Again button */}
+        <button
+          onClick={leaveRoom}
+          className="mt-8 btn bg-white/20 hover:bg-white/30 text-white"
+        >
+          Back to Home
+        </button>
       </div>
     );
   }
@@ -138,6 +146,14 @@ export function GameOverScreen() {
       <div className="mt-8 text-4xl">
         💔
       </div>
+      
+      {/* Play Again button */}
+      <button
+        onClick={leaveRoom}
+        className="mt-8 btn bg-white/20 hover:bg-white/30 text-white"
+      >
+        Back to Home
+      </button>
     </div>
   );
 }

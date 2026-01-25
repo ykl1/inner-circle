@@ -1,4 +1,5 @@
 import { useGame, PHASES } from './context/GameContext';
+import { GameHeader } from './components/GameHeader';
 import { JoinScreen } from './screens/JoinScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { FlexScreen } from './screens/FlexScreen';
@@ -8,8 +9,34 @@ import { VotingScreen } from './screens/VotingScreen';
 import { RoundResultsScreen } from './screens/RoundResultsScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 
+/**
+ * Wrapper for in-game screens with header
+ */
+function GameLayout({ children }) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <GameHeader />
+      <div className="flex-1 flex flex-col">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const { gameState } = useGame();
+  const { gameState, isRejoining } = useGame();
+  
+  // Show loading while attempting to rejoin
+  if (isRejoining) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-pulse">🔄</div>
+          <div className="text-white/60">Reconnecting...</div>
+        </div>
+      </div>
+    );
+  }
   
   // Not connected to a room yet
   if (!gameState) {
@@ -19,30 +46,34 @@ function App() {
   // Render based on current phase
   const phase = gameState.currentPhase;
   
+  // Game over doesn't need the header (has its own back button)
+  if (phase === PHASES.GAME_OVER) {
+    return <GameOverScreen />;
+  }
+  
+  // All other phases get the header
+  let screen;
   switch (phase) {
     case PHASES.LOBBY:
-      return <LobbyScreen />;
-    
+      screen = <LobbyScreen />;
+      break;
     case PHASES.FLEX_SELECTION:
-      return <FlexScreen />;
-    
+      screen = <FlexScreen />;
+      break;
     case PHASES.SABOTAGE:
-      return <SabotageScreen />;
-    
+      screen = <SabotageScreen />;
+      break;
     case PHASES.PITCHING:
-      return <PitchScreen />;
-    
+      screen = <PitchScreen />;
+      break;
     case PHASES.VOTING:
-      return <VotingScreen />;
-    
+      screen = <VotingScreen />;
+      break;
     case PHASES.ROUND_RESULTS:
-      return <RoundResultsScreen />;
-    
-    case PHASES.GAME_OVER:
-      return <GameOverScreen />;
-    
+      screen = <RoundResultsScreen />;
+      break;
     default:
-      return (
+      screen = (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-white text-center">
             <div className="text-4xl mb-4">🤔</div>
@@ -51,6 +82,8 @@ function App() {
         </div>
       );
   }
+  
+  return <GameLayout>{screen}</GameLayout>;
 }
 
 export default App;

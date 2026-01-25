@@ -8,6 +8,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
  */
 export function useSocket(onRoomUpdate, onPhaseChange) {
   const socketRef = useRef(null);
+  const onConnectCallbacks = useRef([]);
   
   useEffect(() => {
     // Create socket connection
@@ -19,6 +20,9 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
     
     socket.on('connect', () => {
       console.log('Connected to server:', socket.id);
+      // Fire any waiting callbacks
+      onConnectCallbacks.current.forEach(cb => cb());
+      onConnectCallbacks.current = [];
     });
     
     socket.on('disconnect', () => {
@@ -44,6 +48,18 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
     };
   }, []);
   
+  // Helper to wait for socket connection
+  const waitForConnection = useCallback(() => {
+    return new Promise((resolve) => {
+      const socket = socketRef.current;
+      if (socket?.connected) {
+        resolve();
+      } else {
+        onConnectCallbacks.current.push(resolve);
+      }
+    });
+  }, []);
+  
   // Create room
   const createRoom = useCallback((playerName) => {
     return new Promise((resolve, reject) => {
@@ -61,6 +77,33 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
   const joinRoom = useCallback((roomId, playerName) => {
     return new Promise((resolve, reject) => {
       socketRef.current?.emit('join_room', { roomId, playerName }, (response) => {
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
+  }, []);
+  
+  // Rejoin room after refresh (with timeout and connection check)
+  const rejoinRoom = useCallback((roomId, playerName) => {
+    return new Promise((resolve, reject) => {
+      const socket = socketRef.current;
+      
+      // Check if socket exists and is connected
+      if (!socket || !socket.connected) {
+        reject(new Error('Socket not connected'));
+        return;
+      }
+      
+      // Set timeout to prevent hanging forever
+      const timeout = setTimeout(() => {
+        reject(new Error('Rejoin timeout'));
+      }, 5000);
+      
+      socket.emit('rejoin_room', { roomId, playerName }, (response) => {
+        clearTimeout(timeout);
         if (response.success) {
           resolve(response);
         } else {
@@ -114,10 +157,10 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
     });
   }, []);
   
-  // Finish pitch
-  const finishPitch = useCallback(() => {
+  // Finish pitch (with expected index to prevent race condition)
+  const finishPitch = useCallback((expectedIndex) => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('finish_pitch', {}, (response) => {
+      socketRef.current?.emit('finish_pitch', { expectedIndex }, (response) => {
         if (response.success) {
           resolve(response);
         } else {
@@ -155,8 +198,10 @@ export function useSocket(onRoomUpdate, onPhaseChange) {
   
   return {
     socket: socketRef.current,
+    waitForConnection,
     createRoom,
     joinRoom,
+    rejoinRoom,
     updateSettings,
     startGame,
     submitFlex,

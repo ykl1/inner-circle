@@ -28,7 +28,8 @@ export function PitchScreen() {
   const handleFinishPitch = async () => {
     setIsFinishing(true);
     try {
-      await finishPitch();
+      // Pass current index to prevent race condition if founder and pitcher click simultaneously
+      await finishPitch(currentPitcherIndex);
     } catch (err) {
       console.error('Failed to finish pitch:', err);
     } finally {

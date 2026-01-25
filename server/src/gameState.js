@@ -306,12 +306,19 @@ function startPitchingPhase(room) {
  * Finish current pitch and move to next pitcher
  * @param {string} roomId 
  * @param {string} playerId - Must be current pitcher or founder
+ * @param {number} expectedIndex - The pitcher index the client expects to advance from
  * @returns {Object|null}
  */
-export function finishPitch(roomId, playerId) {
+export function finishPitch(roomId, playerId, expectedIndex) {
   const room = rooms.get(roomId);
   if (!room) return null;
   if (room.currentPhase !== PHASES.PITCHING) return null;
+  
+  // Validate expected index matches current state (prevents race condition)
+  if (typeof expectedIndex === 'number' && room.currentPitcherIndex !== expectedIndex) {
+    // Already advanced by another request, silently succeed (idempotent)
+    return room;
+  }
   
   const currentPitcher = room.pitchOrder[room.currentPitcherIndex];
   
@@ -587,4 +594,103 @@ export function cleanupRoom(roomId) {
   if (room && room.players.every(p => !p.isConnected)) {
     rooms.delete(roomId);
   }
+}
+
+/**
+ * Rejoin a room with a new socket ID
+ * Matches player by name and room ID
+ * @param {string} roomId 
+ * @param {string} newSocketId - New socket ID
+ * @param {string} playerName - Player's name to match
+ * @returns {Object|null} Room and old player ID if successful
+ */
+export function rejoinRoom(roomId, newSocketId, playerName) {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  
+  // Find player by name
+  const player = room.players.find(p => p.name === playerName);
+  if (!player) return null;
+  
+  const oldPlayerId = player.id;
+  
+  // Update player's socket ID
+  player.id = newSocketId;
+  player.isConnected = true;
+  
+  // Update founderId if this player is the founder
+  if (room.founderId === oldPlayerId) {
+    room.founderId = newSocketId;
+  }
+  
+  // Update judges array
+  const judgeIndex = room.judges.indexOf(oldPlayerId);
+  if (judgeIndex !== -1) {
+    room.judges[judgeIndex] = newSocketId;
+  }
+  
+  // Update candidates array
+  const candidateIndex = room.candidates.indexOf(oldPlayerId);
+  if (candidateIndex !== -1) {
+    room.candidates[candidateIndex] = newSocketId;
+  }
+  
+  // Update playerHands
+  if (room.playerHands[oldPlayerId]) {
+    room.playerHands[newSocketId] = room.playerHands[oldPlayerId];
+    delete room.playerHands[oldPlayerId];
+  }
+  
+  // Update flexSelections
+  if (room.flexSelections[oldPlayerId]) {
+    room.flexSelections[newSocketId] = room.flexSelections[oldPlayerId];
+    delete room.flexSelections[oldPlayerId];
+  }
+  
+  // Update sabotageTargets (both as key and value)
+  if (room.sabotageTargets[oldPlayerId]) {
+    room.sabotageTargets[newSocketId] = room.sabotageTargets[oldPlayerId];
+    delete room.sabotageTargets[oldPlayerId];
+  }
+  for (const [key, value] of Object.entries(room.sabotageTargets)) {
+    if (value === oldPlayerId) {
+      room.sabotageTargets[key] = newSocketId;
+    }
+  }
+  
+  // Update sabotageSelections
+  if (room.sabotageSelections[oldPlayerId]) {
+    room.sabotageSelections[newSocketId] = room.sabotageSelections[oldPlayerId];
+    delete room.sabotageSelections[oldPlayerId];
+  }
+  
+  // Update pitchHands
+  if (room.pitchHands[oldPlayerId]) {
+    room.pitchHands[newSocketId] = room.pitchHands[oldPlayerId];
+    delete room.pitchHands[oldPlayerId];
+  }
+  
+  // Update pitchOrder
+  const pitchOrderIndex = room.pitchOrder.indexOf(oldPlayerId);
+  if (pitchOrderIndex !== -1) {
+    room.pitchOrder[pitchOrderIndex] = newSocketId;
+  }
+  
+  // Update votes (both as key and value)
+  if (room.votes[oldPlayerId]) {
+    room.votes[newSocketId] = room.votes[oldPlayerId];
+    delete room.votes[oldPlayerId];
+  }
+  for (const [key, value] of Object.entries(room.votes)) {
+    if (value === oldPlayerId) {
+      room.votes[key] = newSocketId;
+    }
+  }
+  
+  // Update roundWinner if needed
+  if (room.roundWinner === oldPlayerId) {
+    room.roundWinner = newSocketId;
+  }
+  
+  return { room, oldPlayerId };
 }

@@ -7,6 +7,7 @@ import {
   createRoom,
   getRoom,
   joinRoom,
+  rejoinRoom,
   updateRoomSettings,
   startGame,
   submitFlex,
@@ -80,6 +81,37 @@ export function initSocketHandlers(io) {
       } catch (error) {
         console.error('join_room error:', error);
         callback({ success: false, error: 'Failed to join room' });
+      }
+    });
+    
+    /**
+     * Rejoin a room after disconnect/refresh
+     */
+    socket.on('rejoin_room', ({ roomId, playerName }, callback) => {
+      try {
+        const result = rejoinRoom(roomId.toUpperCase(), socket.id, playerName);
+        
+        if (!result) {
+          callback({ success: false, error: 'Could not rejoin room' });
+          return;
+        }
+        
+        const { room, oldPlayerId } = result;
+        currentRoomId = room.roomId;
+        socket.join(room.roomId);
+        
+        console.log(`Player rejoined: ${playerName} (${oldPlayerId} -> ${socket.id})`);
+        
+        callback({
+          success: true,
+          roomId: room.roomId,
+          categories
+        });
+        
+        emitRoomUpdate(io, room);
+      } catch (error) {
+        console.error('rejoin_room error:', error);
+        callback({ success: false, error: 'Failed to rejoin room' });
       }
     });
     
@@ -174,13 +206,13 @@ export function initSocketHandlers(io) {
     /**
      * Finish pitch (current pitcher or founder)
      */
-    socket.on('finish_pitch', (_, callback) => {
+    socket.on('finish_pitch', ({ expectedIndex }, callback) => {
       if (!currentRoomId) {
         callback?.({ success: false, error: 'Not in a room' });
         return;
       }
       
-      const result = finishPitch(currentRoomId, socket.id);
+      const result = finishPitch(currentRoomId, socket.id, expectedIndex);
       if (!result) {
         callback?.({ success: false, error: 'Cannot finish pitch' });
         return;

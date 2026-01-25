@@ -1,7 +1,9 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useSocket } from '../hooks/useSocket';
 
 const GameContext = createContext(null);
+
+const SESSION_KEY = 'inner_circle_session';
 
 export const PHASES = {
   LOBBY: 'LOBBY',
@@ -13,12 +15,34 @@ export const PHASES = {
   GAME_OVER: 'GAME_OVER'
 };
 
+// Helper to save session
+function saveSession(roomId, playerName) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ roomId, playerName }));
+}
+
+// Helper to get session
+function getSession() {
+  try {
+    const data = localStorage.getItem(SESSION_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Helper to clear session
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
 export function GameProvider({ children }) {
   const [gameState, setGameState] = useState(null);
   const [playerName, setPlayerName] = useState('');
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isRejoining, setIsRejoining] = useState(true);
+  const rejoinAttempted = useRef(false);
   
   const handleRoomUpdate = useCallback((data) => {
     setGameState(data);
@@ -31,12 +55,58 @@ export function GameProvider({ children }) {
   
   const socket = useSocket(handleRoomUpdate, handlePhaseChange);
   
+  // Store socket in ref to avoid dependency issues
+  const socketRef = useRef(socket);
+  socketRef.current = socket;
+  
+  // Try to rejoin on mount
+  useEffect(() => {
+    if (rejoinAttempted.current) return;
+    rejoinAttempted.current = true;
+    
+    const session = getSession();
+    if (session && session.roomId && session.playerName) {
+      console.log('Attempting to rejoin room:', session.roomId);
+      
+      // Wait for socket connection, then try to rejoin
+      const attemptRejoin = async () => {
+        try {
+          // Wait for socket to be connected (with timeout)
+          const connectionTimeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection timeout')), 5000)
+          );
+          
+          await Promise.race([
+            socketRef.current.waitForConnection(),
+            connectionTimeout
+          ]);
+          
+          const result = await socketRef.current.rejoinRoom(session.roomId, session.playerName);
+          setPlayerName(session.playerName);
+          setCategories(result.categories || []);
+          setIsConnected(true);
+          console.log('Rejoined room successfully');
+        } catch (err) {
+          console.log('Failed to rejoin, clearing session:', err.message);
+          clearSession();
+        } finally {
+          setIsRejoining(false);
+        }
+      };
+      
+      attemptRejoin();
+    } else {
+      setIsRejoining(false);
+    }
+  }, []); // Empty dependency - runs once on mount
+  
   const handleCreateRoom = async (name) => {
     try {
       setPlayerName(name);
       const result = await socket.createRoom(name);
       setCategories(result.categories || []);
       setIsConnected(true);
+      saveSession(result.roomId, name);
     } catch (err) {
       setError(err.message);
       throw err;
@@ -49,10 +119,21 @@ export function GameProvider({ children }) {
       const result = await socket.joinRoom(roomId, name);
       setCategories(result.categories || []);
       setIsConnected(true);
+      saveSession(result.roomId, name);
     } catch (err) {
       setError(err.message);
       throw err;
     }
+  };
+  
+  const handleLeaveRoom = () => {
+    clearSession();
+    setGameState(null);
+    setPlayerName('');
+    setIsConnected(false);
+    setError(null);
+    // Reload to get fresh socket connection
+    window.location.reload();
   };
   
   const handleStartGame = async () => {
@@ -86,9 +167,9 @@ export function GameProvider({ children }) {
     }
   };
   
-  const handleFinishPitch = async () => {
+  const handleFinishPitch = async (expectedIndex) => {
     try {
-      await socket.finishPitch();
+      await socket.finishPitch(expectedIndex);
     } catch (err) {
       setError(err.message);
       throw err;
@@ -120,10 +201,12 @@ export function GameProvider({ children }) {
     error,
     categories,
     isConnected,
+    isRejoining,
     
     // Actions
     createRoom: handleCreateRoom,
     joinRoom: handleJoinRoom,
+    leaveRoom: handleLeaveRoom,
     startGame: handleStartGame,
     updateSettings: handleUpdateSettings,
     submitFlex: handleSubmitFlex,

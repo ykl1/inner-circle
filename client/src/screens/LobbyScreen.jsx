@@ -101,7 +101,7 @@ export function LobbyScreen() {
           {/* Group capacity */}
           <div>
             <label className="block text-white/70 text-sm mb-2">
-              Group Capacity (how many winners?)
+              Inner Circle Size (how many join the squad?)
             </label>
             <select
               value={groupCapacity}
