@@ -9,49 +9,58 @@ export function GameHeader() {
   const { gameState, leaveRoom } = useGame();
   const [showConfirm, setShowConfirm] = useState(false);
   
-  const roomId = gameState?.roomId;
+  const roomCode = gameState?.roomCode;
   
-  if (!roomId) return null;
+  if (!roomCode) return null;
   
   return (
     <>
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/10">
-        <div className="text-white/60 text-sm">
-          Room: <span className="font-mono font-bold text-white/80">{roomId}</span>
+      <div
+        className="flex items-center justify-between py-2"
+        style={{
+          paddingLeft: 'var(--space-lg)',
+          paddingRight: 'var(--space-lg)',
+          background: 'var(--color-bg-card)',
+          borderBottom: '1px solid var(--color-border-subtle)',
+        }}
+      >
+        <div className="text-body" style={{ color: 'var(--color-text-secondary)' }}>
+          Room: <span className="font-mono font-semibold" style={{ color: 'var(--color-text-primary)' }}>{roomCode}</span>
         </div>
-        
         <button
           onClick={() => setShowConfirm(true)}
-          className="text-white/50 hover:text-white/80 text-sm px-3 py-1 
-                     rounded-lg hover:bg-white/10 transition-colors"
+          className="text-body rounded-lg transition-colors"
+          style={{ color: 'var(--color-text-secondary)', padding: 'var(--space-sm) var(--space-md)' }}
         >
           Leave
         </button>
       </div>
-      
-      {/* Confirmation modal */}
+
       {showConfirm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-game-dark border border-white/20 rounded-2xl p-6 max-w-sm w-full">
-            <h3 className="text-xl font-bold text-white mb-3">
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{ background: 'var(--color-bg-overlay)' }}
+        >
+          <div
+            className="p-6 max-w-sm w-full"
+            style={{
+              background: 'var(--color-bg-card)',
+              border: '1px solid var(--color-border-subtle)',
+              borderRadius: '16px',
+              boxShadow: '0px 8px 40px rgba(0, 0, 0, 0.6)',
+            }}
+          >
+            <h3 className="text-title mb-3" style={{ color: 'var(--color-text-primary)' }}>
               Leave Game?
             </h3>
-            <p className="text-white/60 mb-6">
-              Are you sure you want to leave? You won't be able to rejoin this game.
+            <p className="text-body mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+              Are you sure you want to leave? You won&apos;t be able to rejoin this game.
             </p>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="btn bg-white/10 hover:bg-white/20 flex-1"
-              >
+            <div className="flex gap-3" style={{ gap: 'var(--space-md)' }}>
+              <button onClick={() => setShowConfirm(false)} className="btn btn-secondary flex-1">
                 Cancel
               </button>
-              <button
-                onClick={leaveRoom}
-                className="btn bg-red-500 hover:bg-red-600 flex-1"
-              >
+              <button onClick={leaveRoom} className="btn btn-danger flex-1">
                 Leave
               </button>
             </div>

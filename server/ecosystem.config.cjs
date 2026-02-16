@@ -2,7 +2,7 @@
 module.exports = {
   apps: [
     {
-      name: 'inner-circle-server',
+      name: 'pick-me-server',
       script: 'src/index.js',
       instances: 1,
       autorestart: true,

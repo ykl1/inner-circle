@@ -3,36 +3,33 @@ import { useSocket } from '../hooks/useSocket';
 
 const GameContext = createContext(null);
 
-const SESSION_KEY = 'inner_circle_session';
+const ROOM_CODE_KEY = 'pickme_roomCode';
+const PLAYER_NAME_KEY = 'pickme_playerName';
 
 export const PHASES = {
   LOBBY: 'LOBBY',
-  FLEX_SELECTION: 'FLEX_SELECTION',
+  SELF_POSITIONING: 'SELF_POSITIONING',
   SABOTAGE: 'SABOTAGE',
   PITCHING: 'PITCHING',
   VOTING: 'VOTING',
-  ROUND_RESULTS: 'ROUND_RESULTS',
   GAME_OVER: 'GAME_OVER'
 };
 
-// Helper to save session
-function saveSession(roomId, playerName) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ roomId, playerName }));
+function saveSession(roomCode, playerName) {
+  localStorage.setItem(ROOM_CODE_KEY, roomCode);
+  localStorage.setItem(PLAYER_NAME_KEY, playerName);
 }
 
-// Helper to get session
 function getSession() {
-  try {
-    const data = localStorage.getItem(SESSION_KEY);
-    return data ? JSON.parse(data) : null;
-  } catch {
-    return null;
-  }
+  const roomCode = localStorage.getItem(ROOM_CODE_KEY);
+  const playerName = localStorage.getItem(PLAYER_NAME_KEY);
+  if (!roomCode || !playerName) return null;
+  return { roomId: roomCode, roomCode, playerName };
 }
 
-// Helper to clear session
 function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(ROOM_CODE_KEY);
+  localStorage.removeItem(PLAYER_NAME_KEY);
 }
 
 export function GameProvider({ children }) {
@@ -44,76 +41,64 @@ export function GameProvider({ children }) {
   const [isRejoining, setIsRejoining] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const rejoinAttempted = useRef(false);
-  
+
   const handleRoomUpdate = useCallback((data) => {
     setGameState(data);
     setError(null);
   }, []);
-  
+
   const handlePhaseChange = useCallback((data) => {
-    console.log('Phase changed to:', data.phase);
+    console.log('Phase changed to:', data?.phase);
   }, []);
-  
-  // Store socket ref for use in callbacks
+
+  const handleGameEndedWhileAway = useCallback(() => {
+    clearSession();
+    setGameState(null);
+    setIsConnected(false);
+    setError('The game has ended while you were away.');
+  }, []);
+
+  const handleRoomDissolved = useCallback(() => {
+    clearSession();
+    setGameState(null);
+    setIsConnected(false);
+    setError(null);
+    window.location.reload();
+  }, []);
+
   const socketRef = useRef(null);
-  
-  /**
-   * Rejoin with retries
-   * @param {number} maxRetries - Maximum number of retry attempts
-   * @param {number} attempt - Current attempt number
-   */
+
   const rejoinWithRetries = useCallback(async (maxRetries = 3, attempt = 1) => {
     const session = getSession();
-    if (!session?.roomId || !session?.playerName) {
+    if (!session?.roomCode || !session?.playerName) {
       return { success: false, error: 'No session' };
     }
-    
     try {
-      const result = await socketRef.current.rejoinRoom(session.roomId, session.playerName);
+      const result = await socketRef.current.rejoinRoom(session.roomCode, session.playerName);
       setPlayerName(session.playerName);
       setCategories(result.categories || []);
       setIsConnected(true);
-      console.log(`Rejoin successful on attempt ${attempt}`);
       return { success: true };
     } catch (err) {
-      console.log(`Rejoin attempt ${attempt} failed:`, err.message);
-      
-      // Check if it's a "room not found" error (game ended)
-      if (err.message.includes('not found') || err.message.includes('Could not rejoin')) {
+      if (err.message?.includes('game_ended_while_away') || err.message?.includes('not found') || err.message?.includes('Could not rejoin')) {
         return { success: false, error: 'room_not_found' };
       }
-      
-      // Retry with increasing delay
       if (attempt < maxRetries) {
-        const delay = attempt * 1000; // 1s, 2s, 3s
-        console.log(`Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise(r => setTimeout(r, attempt * 1000));
         return rejoinWithRetries(maxRetries, attempt + 1);
       }
-      
       return { success: false, error: 'max_retries' };
     }
   }, []);
-  
-  /**
-   * Handle reconnection after mobile app switch
-   */
+
   const handleReconnect = useCallback(async () => {
     const session = getSession();
-    if (!session?.roomId || !session?.playerName) {
-      console.log('No session to rejoin on reconnect');
-      return;
-    }
-    
-    console.log('Reconnection detected, syncing state...');
+    if (!session?.roomCode || !session?.playerName) return;
     setIsSyncing(true);
-    
     try {
       const result = await rejoinWithRetries(3);
-      
       if (!result.success) {
         if (result.error === 'room_not_found') {
-          console.log('Room no longer exists, clearing session');
           clearSession();
           setGameState(null);
           setIsConnected(false);
@@ -126,91 +111,88 @@ export function GameProvider({ children }) {
       setIsSyncing(false);
     }
   }, [rejoinWithRetries]);
-  
-  const socket = useSocket(handleRoomUpdate, handlePhaseChange, handleReconnect);
-  
-  // Update socket ref when socket changes
+
+  const socket = useSocket(
+    handleRoomUpdate,
+    handlePhaseChange,
+    handleReconnect,
+    handleGameEndedWhileAway,
+    handleRoomDissolved
+  );
+
   useEffect(() => {
     socketRef.current = socket;
   }, [socket]);
-  
-  // Try to rejoin on mount
+
+  useEffect(() => {
+    fetch(window.location.origin + '/api/categories')
+      .then(r => r.json())
+      .then(setCategories)
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (rejoinAttempted.current) return;
     rejoinAttempted.current = true;
-    
     const session = getSession();
-    if (session && session.roomId && session.playerName) {
-      console.log('Attempting to rejoin room:', session.roomId);
-      
-      // Wait for socket connection, then try to rejoin
+    if (session?.roomCode && session?.playerName) {
       const attemptRejoin = async () => {
         try {
-          // Wait for socket to be connected (with timeout)
-          const connectionTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Connection timeout')), 5000)
-          );
-          
-          await Promise.race([
-            socketRef.current.waitForConnection(),
-            connectionTimeout
-          ]);
-          
+          const connectionTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000));
+          await Promise.race([socketRef.current.waitForConnection(), connectionTimeout]);
           const result = await rejoinWithRetries(3);
           if (!result.success) {
-            console.log('Failed to rejoin, clearing session');
+            if (result.error === 'room_not_found') setError('The game has ended while you were away.');
             clearSession();
           }
-        } catch (err) {
-          console.log('Failed to rejoin, clearing session:', err.message);
+        } catch {
           clearSession();
         } finally {
           setIsRejoining(false);
         }
       };
-      
       attemptRejoin();
     } else {
       setIsRejoining(false);
     }
-  }, []); // Empty dependency - runs once on mount
-  
-  const handleCreateRoom = async (name) => {
+  }, []);
+
+  const handleCreateRoom = async (name, category = 'dating') => {
     try {
       setPlayerName(name);
-      const result = await socket.createRoom(name);
-      setCategories(result.categories || []);
+      const result = await socket.createRoom(name, category);
       setIsConnected(true);
-      saveSession(result.roomId, name);
+      saveSession(result.roomCode, name);
     } catch (err) {
       setError(err.message);
       throw err;
     }
   };
-  
-  const handleJoinRoom = async (roomId, name) => {
+
+  const handleJoinRoom = async (roomCode, name) => {
     try {
       setPlayerName(name);
-      const result = await socket.joinRoom(roomId, name);
-      setCategories(result.categories || []);
+      const result = await socket.joinRoom((roomCode || '').toUpperCase(), name);
       setIsConnected(true);
-      saveSession(result.roomId, name);
+      saveSession(result.roomCode, name);
     } catch (err) {
       setError(err.message);
       throw err;
     }
   };
-  
+
   const handleLeaveRoom = () => {
+    if (gameState?.roomCode && playerName) {
+      socket.leaveRoom(gameState.roomCode, playerName);
+    }
     clearSession();
     setGameState(null);
     setPlayerName('');
     setIsConnected(false);
     setError(null);
-    // Reload to get fresh socket connection
     window.location.reload();
   };
-  
+
   const handleStartGame = async () => {
     try {
       await socket.startGame();
@@ -219,29 +201,25 @@ export function GameProvider({ children }) {
       throw err;
     }
   };
-  
-  const handleUpdateSettings = (settings) => {
-    socket.updateSettings(settings);
-  };
-  
-  const handleSubmitFlex = async (selectedCardIds) => {
+
+  const handleSubmitSelfPositioning = async (positions) => {
     try {
-      await socket.submitFlex(selectedCardIds);
+      await socket.submitSelfPositioning(positions);
     } catch (err) {
       setError(err.message);
       throw err;
     }
   };
-  
-  const handleSubmitSabotage = async (redCardId) => {
+
+  const handleSubmitSabotage = async (deltas) => {
     try {
-      await socket.submitSabotage(redCardId);
+      await socket.submitSabotage(deltas);
     } catch (err) {
       setError(err.message);
       throw err;
     }
   };
-  
+
   const handleFinishPitch = async (expectedIndex) => {
     try {
       await socket.finishPitch(expectedIndex);
@@ -250,27 +228,17 @@ export function GameProvider({ children }) {
       throw err;
     }
   };
-  
-  const handleCastVote = async (candidateId) => {
+
+  const handleSubmitVote = async (votedForName) => {
     try {
-      await socket.castVote(candidateId);
+      await socket.submitVote(votedForName);
     } catch (err) {
       setError(err.message);
       throw err;
     }
   };
-  
-  const handleProceedFromResults = async () => {
-    try {
-      await socket.proceedFromResults();
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    }
-  };
-  
+
   const value = {
-    // State
     gameState,
     playerName,
     error,
@@ -278,21 +246,17 @@ export function GameProvider({ children }) {
     isConnected,
     isRejoining,
     isSyncing,
-    
-    // Actions
     createRoom: handleCreateRoom,
     joinRoom: handleJoinRoom,
     leaveRoom: handleLeaveRoom,
     startGame: handleStartGame,
-    updateSettings: handleUpdateSettings,
-    submitFlex: handleSubmitFlex,
+    submitSelfPositioning: handleSubmitSelfPositioning,
     submitSabotage: handleSubmitSabotage,
     finishPitch: handleFinishPitch,
-    castVote: handleCastVote,
-    proceedFromResults: handleProceedFromResults,
+    submitVote: handleSubmitVote,
     clearError: () => setError(null)
   };
-  
+
   return (
     <GameContext.Provider value={value}>
       {children}
@@ -302,8 +266,6 @@ export function GameProvider({ children }) {
 
 export function useGame() {
   const context = useContext(GameContext);
-  if (!context) {
-    throw new Error('useGame must be used within a GameProvider');
-  }
+  if (!context) throw new Error('useGame must be used within a GameProvider');
   return context;
 }

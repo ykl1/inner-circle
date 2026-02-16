@@ -129,7 +129,15 @@ The Founder also has an "override" button to be able to move to the next player 
 
 ---
 
-### 6️⃣ Integration & Replenishment
+### 6️⃣ Round Results
+
+* **Round Results** is a dedicated phase with its own screen
+* Shows the round winner and vote counts for all candidates
+* **Founder only** can press **"Proceed"** to advance to the next round (or Game Over)
+
+---
+
+### 7️⃣ Integration & Replenishment
 
 * Winner joins the **Inner Circle (Judges)**
 * Winner’s cards are discarded
@@ -167,21 +175,22 @@ Tone is humorous, not punishing.
 
 Game content is split into:
 
-### Core Cards
+### Core Cards (MVP)
 
-Universal traits usable in any category
+* **In-memory deck:** 25 Green (strengths), 15 Red (flaws) — placeholder text (e.g. "Green Trait #1", "Red Flaw #1") in `server/src/cards.js`
+* Universal traits; same deck used for all categories
 
-### Category Packs
+### Category Packs (MVP)
 
-Themed decks tied to the group type
+* **Cosmetic only** for MVP: category sets theme and loser message
+* Implemented categories:
 
-| Category           | In-Group Role | Pitch Goal        | Example Cards                                          |
-| ------------------ | ------------- | ----------------- | ------------------------------------------------------ |
-| Roommates          | Household     | Get on the lease  | G: Professional Chef / R: Pees in sink when drunk      |
-| Startup            | Founders      | Become co-founder | G: Environmentally friendly / R: Mom must join company |
-| Rap Group          | The Crew      | Get signed        | G: Knows Drake / R: Performance anxiety over 50 people |
-| Church Small Group | Leader        | Join group        | G: Can lead worship / R: Past situationship in group   |
-| U.S. Cabinet       | President     | Join cabinet      | G: Nobel Prize / R: Bad at English                     |
+| Category    | Id          | Loser Message                        |
+| ----------- | ----------- | ------------------------------------ |
+| Startup Team| `startup`   | "The startup pivoted without you"    |
+| Rap Group   | `rap-group` | "They left you on read"              |
+
+* Additional categories (Roommates, Church Small Group, U.S. Cabinet, etc.) are design targets for future content; not yet in code.
 
 ---
 
@@ -191,15 +200,18 @@ Themed decks tied to the group type
 
 **Founder:**
 
-* Creates room → gets 4-character code
+* Creates room → gets 4-character room code
 * Selects Category
 * Selects Group Capacity
 * Crown icon shown on avatar
+* Can **Leave room** (clears session and exits)
 
 **Candidates:**
 
-* Join via code
+* Join via code (room code normalized to uppercase)
+* Duplicate names (case-insensitive) are rejected: **"Name already taken in this room"**
 * Wait for game start
+* Can **Leave room** (clears session and exits)
 
 ---
 
@@ -240,10 +252,27 @@ Themed decks tied to the group type
 
 ---
 
-### Phase 6: End Screens
+### Phase 6: Round Results UI
+
+* All players see round winner and vote counts
+* Only Founder sees **Proceed** button to go to next round or Game Over
+
+---
+
+### Phase 7: End Screens & Session Persistence
+
+**End Screens**
 
 * Winners screen shows final Inner Circle
 * Losers see category-themed rejection screen
+
+**Session persistence & rejoin**
+
+* After joining or creating a room, **room code + player name** are stored in `localStorage`
+* On refresh or reconnect (e.g. after switching apps on mobile), the client **rejoins by name**; server migrates the player’s socket ID and keeps all state (hand, votes, phase)
+* **Reconnecting** shows a brief "Reconnecting..." then "Syncing..." overlay while state is fetched
+* If the game ended while away, the user sees "The game has ended while you were away." and session is cleared
+* **Leave room** clears the stored session and reloads the app
 
 ---
 
@@ -257,23 +286,38 @@ Themed decks tied to the group type
 **Backend**
 
 * Node.js + Express
+* Serves static frontend from `server/public` (single deploy)
 
 **Real-Time Layer**
 
-* Socket.io (stateful game server)
+* Socket.io (stateful game server, server-authoritative)
 
-**Database**
+**Data (MVP)**
 
-* Vercel Postgres (relational)
-* Stores card definitions & category packs
+* **In-memory only:** no database for MVP
+* Card definitions and category packs live in code (`server/src/cards.js`)
+* Game state (rooms, hands, votes) in memory on the server
 
 **State Management**
 
-* React Context API for global game state
+* React Context API for global game state on client
+* Server emits personalized `room_state_update` per player (player view)
+
+**Client screens (by phase)**
+
+* Join → `JoinScreen` (create / join by code)
+* LOBBY → `LobbyScreen`
+* FLEX_SELECTION → `FlexScreen`
+* SABOTAGE → `SabotageScreen`
+* PITCHING → `PitchScreen`
+* VOTING → `VotingScreen`
+* ROUND_RESULTS → `RoundResultsScreen`
+* GAME_OVER → `GameOverScreen`
 
 **Deployment**
 
-* Vercel
+* **Primary:** AWS EC2 (e.g. t3.micro) + PM2 — Express serves both API and static frontend on one port (e.g. 3001). Auto-deploy via GitHub Actions. See [DEPLOY.md](./DEPLOY.md).
+* Frontend can alternatively be deployed to Vercel with backend on EC2.
 
 ---
 
@@ -283,15 +327,27 @@ Themed decks tied to the group type
 * No voice chat
 * No AI-generated cards
 * No matchmaking — room-code only
+* No database — card definitions and game state are in-memory
 
 ---
 
 ## 🚀 MVP Milestones
 
-1. Lobby + Room System
-2. Card Deal + Flex Selection
-3. Sabotage System
-4. Pitch Turn System
-5. Voting + Tie Logic
-6. Round Loop + Card Replenishment
-7. End Screens
+| # | Milestone                         | Status |
+|---|-----------------------------------|--------|
+| 1 | Lobby + Room System              | ✅ Done |
+| 2 | Card Deal + Flex Selection       | ✅ Done |
+| 3 | Sabotage System                  | ✅ Done |
+| 4 | Pitch Turn System                | ✅ Done |
+| 5 | Voting + Tie Logic               | ✅ Done |
+| 6 | Round Results + Proceed          | ✅ Done |
+| 7 | Round Loop + Card Replenishment  | ✅ Done |
+| 8 | End Screens (Winners / Losers)   | ✅ Done |
+| 9 | Session persistence & rejoin     | ✅ Done |
+|10 | Leave room                       | ✅ Done |
+
+**Implementation notes**
+
+* **Pitch advance:** Only current pitcher or Founder can advance; `finish_pitch` uses `expectedIndex` for idempotency to avoid race conditions.
+* **Server API:** `GET /health`, `GET /api/categories`; all game actions go through Socket.io events.
+* **Empty rooms:** Disconnected rooms are eligible for cleanup after 60 seconds if no players are connected.

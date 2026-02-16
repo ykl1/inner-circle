@@ -6,30 +6,28 @@ import { useGame } from '../context/GameContext';
  */
 export function JoinScreen() {
   const { createRoom, joinRoom, error, clearError } = useGame();
-  
+
   const [mode, setMode] = useState(null); // 'create' | 'join'
   const [name, setName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    
     setIsLoading(true);
     try {
-      await createRoom(name.trim());
+      await createRoom(name.trim(), 'dating');
     } catch (err) {
       console.error('Failed to create room:', err);
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const handleJoin = async (e) => {
     e.preventDefault();
     if (!name.trim() || !roomCode.trim()) return;
-    
     setIsLoading(true);
     try {
       await joinRoom(roomCode.trim().toUpperCase(), name.trim());
@@ -39,84 +37,67 @@ export function JoinScreen() {
       setIsLoading(false);
     }
   };
-  
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Logo */}
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8" style={{ background: 'var(--color-bg-base)' }}>
+      <div className="w-full max-w-sm" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2xl)' }}>
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Inner Circle
+          <h1 className="text-display mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            Pick Me
           </h1>
-          <p className="text-white/60">
+          <p className="text-body" style={{ color: 'var(--color-text-secondary)' }}>
             The social party game of pitches and sabotage
           </p>
         </div>
-        
-        {/* Error display */}
+
         {error && (
-          <div className="bg-red-500/20 border border-red-500 rounded-xl p-4 text-red-200">
-            {error}
-            <button 
-              onClick={clearError}
-              className="ml-2 text-red-400 hover:text-red-300"
-            >
+          <div className="rounded-xl p-4 flex items-center justify-between" style={{ background: 'var(--color-sab-left)', border: '1px solid var(--color-sab-delta)', color: 'var(--color-text-primary)' }}>
+            <span>{error}</span>
+            <button type="button" onClick={clearError} className="text-mono ml-2" style={{ color: 'var(--color-text-primary)' }}>
               ×
             </button>
           </div>
         )}
-        
-        {/* Mode selection */}
+
         {!mode && (
           <>
-            <div className="space-y-4">
-              <button
-                onClick={() => setMode('create')}
-                className="btn-primary w-full text-lg"
-              >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+              <button onClick={() => setMode('create')} className="btn btn-primary w-full">
                 Create Room
               </button>
-              <button
-                onClick={() => setMode('join')}
-                className="btn bg-white/10 hover:bg-white/20 w-full text-lg"
-              >
+              <button onClick={() => setMode('join')} className="btn btn-secondary w-full">
                 Join Room
               </button>
             </div>
-            
-            {/* Game Rules */}
-            <div className="card bg-white/5 text-sm">
-              <h2 className="text-game-gold font-bold mb-3 text-center">How to Play</h2>
-              <div className="space-y-2 text-white/80">
+
+            <div className="card-no-shadow">
+              <h2 className="text-label mb-3 text-center" style={{ color: 'var(--color-text-primary)' }}>How to Play</h2>
+              <div className="space-y-2 text-body" style={{ color: 'var(--color-text-secondary)' }}>
                 <div className="flex gap-2">
-                  <span className="text-game-green">1.</span>
-                  <span><strong>Flex</strong> — Pick 2 strength cards to show off</span>
+                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>1.</span>
+                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Build Your Date</strong> — Set 3 dials to match the Judge&apos;s taste</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-game-red">2.</span>
-                  <span><strong>Sabotage</strong> — Secretly give a flaw card to a rival</span>
+                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>2.</span>
+                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Sabotage</strong> — Use 6 points to move a rival&apos;s dials</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-game-purple">3.</span>
-                  <span><strong>Pitch</strong> — Present your 3-card hand (2 strengths + 1 flaw)</span>
+                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>3.</span>
+                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Pitch</strong> — Take turns presenting your (possibly sabotaged) dials</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-game-gold">4.</span>
-                  <span><strong>Vote</strong> — Judges pick who joins the Inner Circle</span>
+                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>4.</span>
+                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Vote</strong> — The Judge picks one date</span>
                 </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-white/10 text-white/60 text-xs text-center">
-                👑 The Founder's vote breaks all ties
               </div>
             </div>
           </>
         )}
-        
-        {/* Create room form */}
+
         {mode === 'create' && (
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
             <div>
-              <label className="block text-white/70 text-sm mb-2">
+              <label className="block text-label mb-2" style={{ color: 'var(--color-text-secondary)' }}>
                 Your Name
               </label>
               <input
@@ -129,31 +110,21 @@ export function JoinScreen() {
                 autoFocus
               />
             </div>
-            
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setMode(null)}
-                className="btn bg-white/10 hover:bg-white/20 flex-1"
-              >
+            <div className="flex gap-3" style={{ gap: 'var(--space-md)' }}>
+              <button type="button" onClick={() => setMode(null)} className="btn btn-secondary flex-1">
                 Back
               </button>
-              <button
-                type="submit"
-                disabled={!name.trim() || isLoading}
-                className="btn-primary flex-1"
-              >
+              <button type="submit" disabled={!name.trim() || isLoading} className="btn btn-primary flex-1">
                 {isLoading ? 'Creating...' : 'Create'}
               </button>
             </div>
           </form>
         )}
-        
-        {/* Join room form */}
+
         {mode === 'join' && (
-          <form onSubmit={handleJoin} className="space-y-4">
+          <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
             <div>
-              <label className="block text-white/70 text-sm mb-2">
+              <label className="block text-label mb-2" style={{ color: 'var(--color-text-secondary)' }}>
                 Your Name
               </label>
               <input
@@ -166,9 +137,8 @@ export function JoinScreen() {
                 autoFocus
               />
             </div>
-            
             <div>
-              <label className="block text-white/70 text-sm mb-2">
+              <label className="block text-label mb-2" style={{ color: 'var(--color-text-secondary)' }}>
                 Room Code
               </label>
               <input
@@ -176,24 +146,16 @@ export function JoinScreen() {
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 placeholder="ABCD"
-                className="input text-center text-2xl tracking-widest"
+                className="input text-center text-mono"
+                style={{ fontSize: '24px', letterSpacing: '0.2em' }}
                 maxLength={4}
               />
             </div>
-            
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setMode(null)}
-                className="btn bg-white/10 hover:bg-white/20 flex-1"
-              >
+            <div className="flex gap-3" style={{ gap: 'var(--space-md)' }}>
+              <button type="button" onClick={() => setMode(null)} className="btn btn-secondary flex-1">
                 Back
               </button>
-              <button
-                type="submit"
-                disabled={!name.trim() || roomCode.length !== 4 || isLoading}
-                className="btn-primary flex-1"
-              >
+              <button type="submit" disabled={!name.trim() || roomCode.length !== 4 || isLoading} className="btn btn-primary flex-1">
                 {isLoading ? 'Joining...' : 'Join'}
               </button>
             </div>

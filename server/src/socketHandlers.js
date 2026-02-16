@@ -1,5 +1,5 @@
 /**
- * Socket.io Event Handlers
+ * Socket.io Event Handlers — Pick Me
  * All game logic is server-authoritative
  */
 
@@ -8,309 +8,232 @@ import {
   getRoom,
   joinRoom,
   rejoinRoom,
-  updateRoomSettings,
+  leaveRoom,
   startGame,
-  submitFlex,
+  submitSelfPositioning,
   submitSabotage,
   finishPitch,
-  castVote,
-  proceedFromResults,
+  submitVote,
   getPlayerView,
   playerDisconnect,
   cleanupRoom,
   PHASES
 } from './gameState.js';
-import { categories } from './cards.js';
+import { listCategories } from './cards.js';
 
 /**
  * Initialize socket handlers
- * @param {import('socket.io').Server} io 
+ * @param {import('socket.io').Server} io
  */
 export function initSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
-    
-    // Store current room for this socket
-    let currentRoomId = null;
-    
-    /**
-     * Create a new room (become founder)
-     */
-    socket.on('create_room', ({ playerName }, callback) => {
+
+    let currentRoomCode = null;
+
+    socket.on('create_room', ({ playerName, category }, callback) => {
       try {
-        const room = createRoom(socket.id, playerName);
-        currentRoomId = room.roomId;
-        
-        socket.join(room.roomId);
-        
-        callback({
-          success: true,
-          roomId: room.roomId,
-          categories
-        });
-        
-        emitRoomUpdate(io, room);
-      } catch (error) {
-        console.error('create_room error:', error);
+        const room = createRoom(socket.id, playerName, category || 'dating');
+        currentRoomCode = room.code;
+        socket.join(room.code);
+
+        const view = getPlayerView(room.code, socket.id);
+        callback({ success: true, roomCode: room.code });
+        socket.emit('room_state_update', view);
+      } catch (err) {
+        console.error('create_room error:', err);
         callback({ success: false, error: 'Failed to create room' });
       }
     });
-    
-    /**
-     * Join an existing room
-     */
-    socket.on('join_room', ({ roomId, playerName }, callback) => {
+
+    socket.on('join_room', ({ roomCode, playerName }, callback) => {
       try {
-        const result = joinRoom(roomId.toUpperCase(), socket.id, playerName);
-        
+        const code = (roomCode || '').toUpperCase();
+        const result = joinRoom(code, socket.id, playerName);
+
         if (result.error) {
-          callback({ success: false, error: result.error });
+          const message =
+            result.error === 'name_taken'
+              ? 'Name already taken in this room.'
+              : result.error === 'room_not_found'
+                ? 'Room not found.'
+                : result.error === 'game_in_progress'
+                  ? 'Game already in progress.'
+                  : result.error;
+          callback({ success: false, error: message });
           return;
         }
-        
+
         const room = result.room;
-        currentRoomId = room.roomId;
-        socket.join(room.roomId);
-        
-        callback({
-          success: true,
-          roomId: room.roomId,
-          categories
-        });
-        
+        currentRoomCode = room.code;
+        socket.join(room.code);
+
+        callback({ success: true, roomCode: room.code });
         emitRoomUpdate(io, room);
-      } catch (error) {
-        console.error('join_room error:', error);
+      } catch (err) {
+        console.error('join_room error:', err);
         callback({ success: false, error: 'Failed to join room' });
       }
     });
-    
-    /**
-     * Rejoin a room after disconnect/refresh
-     */
-    socket.on('rejoin_room', ({ roomId, playerName }, callback) => {
+
+    socket.on('rejoin_room', ({ roomCode, playerName }, callback) => {
       try {
-        const result = rejoinRoom(roomId.toUpperCase(), socket.id, playerName);
-        
+        const code = (roomCode || '').toUpperCase();
+        const result = rejoinRoom(code, socket.id, playerName);
+
         if (!result) {
           callback({ success: false, error: 'Could not rejoin room' });
           return;
         }
-        
-        const { room, oldPlayerId } = result;
-        currentRoomId = room.roomId;
-        socket.join(room.roomId);
-        
-        console.log(`Player rejoined: ${playerName} (${oldPlayerId} -> ${socket.id})`);
-        
-        callback({
-          success: true,
-          roomId: room.roomId,
-          categories
-        });
-        
+
+        const { room } = result;
+        if (room.phase === PHASES.GAME_OVER) {
+          socket.emit('game_ended_while_away');
+          callback({ success: false, error: 'game_ended_while_away' });
+          return;
+        }
+
+        currentRoomCode = room.code;
+        socket.join(room.code);
+
+        console.log(`Player rejoined: ${playerName}`);
+        callback({ success: true, roomCode: room.code });
         emitRoomUpdate(io, room);
-      } catch (error) {
-        console.error('rejoin_room error:', error);
-        callback({ success: false, error: 'Failed to rejoin room' });
+      } catch (err) {
+        console.error('rejoin_room error:', err);
+        callback({ success: false, error: 'Could not rejoin room' });
       }
     });
-    
-    /**
-     * Update room settings (founder only)
-     */
-    socket.on('update_settings', ({ categoryId, groupCapacity }) => {
-      if (!currentRoomId) return;
-      
-      const room = getRoom(currentRoomId);
-      if (!room || room.founderId !== socket.id) return;
-      
-      updateRoomSettings(currentRoomId, { categoryId, groupCapacity });
-      emitRoomUpdate(io, room);
+
+    socket.on('leave_room', ({ roomCode, playerName }) => {
+      const code = (roomCode || currentRoomCode || '').toUpperCase();
+      const result = leaveRoom(code, playerName);
+
+      socket.leave(code);
+      currentRoomCode = null;
+
+      if (result.dissolved && result.room) {
+        for (const p of result.room.players) {
+          io.to(p.id).emit('room_dissolved');
+        }
+      } else if (result.room) {
+        emitRoomUpdate(io, result.room);
+      }
     });
-    
-    /**
-     * Start the game (founder only)
-     */
+
     socket.on('start_game', (_, callback) => {
-      if (!currentRoomId) {
+      if (!currentRoomCode) {
         callback?.({ success: false, error: 'Not in a room' });
         return;
       }
-      
-      const room = getRoom(currentRoomId);
-      if (!room || room.founderId !== socket.id) {
-        callback?.({ success: false, error: 'Only founder can start game' });
+
+      const room = getRoom(currentRoomCode);
+      if (!room || room.hostSocketId !== socket.id) {
+        callback?.({ success: false, error: 'Only the Judge can start the game' });
         return;
       }
-      
-      const result = startGame(currentRoomId);
+
+      const updated = startGame(currentRoomCode);
+      if (!updated) {
+        callback?.({ success: false, error: 'Need at least 3 players (1 Judge + 2 candidates) to start' });
+        return;
+      }
+
+      callback?.({ success: true });
+      emitRoomUpdate(io, updated);
+    });
+
+    socket.on('submit_self_positioning', ({ roomCode, positions }, callback) => {
+      const code = (roomCode || currentRoomCode || '').toUpperCase();
+      if (!code) {
+        callback?.({ success: false, error: 'Not in a room' });
+        return;
+      }
+
+      const result = submitSelfPositioning(code, socket.id, positions);
       if (!result) {
-        callback?.({ 
-          success: false, 
-          error: `Need at least ${room.groupCapacity + 1} players to start` 
-        });
+        callback?.({ success: false, error: 'Invalid self-positioning' });
         return;
       }
-      
+
       callback?.({ success: true });
       emitRoomUpdate(io, result);
-      emitPhaseChange(io, result);
     });
-    
-    /**
-     * Submit flex selection (2 green cards)
-     */
-    socket.on('submit_flex', ({ selectedCardIds }, callback) => {
-      if (!currentRoomId) {
+
+    socket.on('submit_sabotage', ({ roomCode, deltas }, callback) => {
+      const code = (roomCode || currentRoomCode || '').toUpperCase();
+      if (!code) {
         callback?.({ success: false, error: 'Not in a room' });
         return;
       }
-      
-      const result = submitFlex(currentRoomId, socket.id, selectedCardIds);
+
+      const result = submitSabotage(code, socket.id, deltas);
       if (!result) {
-        callback?.({ success: false, error: 'Invalid flex selection' });
+        callback?.({ success: false, error: 'Invalid sabotage (need exactly 6 points total)' });
         return;
       }
-      
+
       callback?.({ success: true });
       emitRoomUpdate(io, result);
-      
-      if (result.currentPhase === PHASES.SABOTAGE) {
-        emitPhaseChange(io, result);
-      }
     });
-    
-    /**
-     * Submit sabotage (1 red card to target)
-     */
-    socket.on('submit_sabotage', ({ redCardId }, callback) => {
-      if (!currentRoomId) {
+
+    socket.on('finish_pitch', ({ roomCode, expectedIndex }, callback) => {
+      const code = (roomCode || currentRoomCode || '').toUpperCase();
+      if (!code) {
         callback?.({ success: false, error: 'Not in a room' });
         return;
       }
-      
-      const result = submitSabotage(currentRoomId, socket.id, redCardId);
-      if (!result) {
-        callback?.({ success: false, error: 'Invalid sabotage selection' });
-        return;
-      }
-      
-      callback?.({ success: true });
-      emitRoomUpdate(io, result);
-      
-      if (result.currentPhase === PHASES.PITCHING) {
-        emitPhaseChange(io, result);
-      }
-    });
-    
-    /**
-     * Finish pitch (current pitcher or founder)
-     */
-    socket.on('finish_pitch', ({ expectedIndex }, callback) => {
-      if (!currentRoomId) {
-        callback?.({ success: false, error: 'Not in a room' });
-        return;
-      }
-      
-      const result = finishPitch(currentRoomId, socket.id, expectedIndex);
+
+      const result = finishPitch(code, socket.id, expectedIndex);
       if (!result) {
         callback?.({ success: false, error: 'Cannot finish pitch' });
         return;
       }
-      
+
       callback?.({ success: true });
       emitRoomUpdate(io, result);
-      
-      if (result.currentPhase === PHASES.VOTING) {
-        emitPhaseChange(io, result);
-      }
     });
-    
-    /**
-     * Cast vote (judges only)
-     */
-    socket.on('cast_vote', ({ candidateId }, callback) => {
-      if (!currentRoomId) {
+
+    socket.on('submit_vote', ({ roomCode, votedForName }, callback) => {
+      const code = (roomCode || currentRoomCode || '').toUpperCase();
+      if (!code) {
         callback?.({ success: false, error: 'Not in a room' });
         return;
       }
-      
-      const result = castVote(currentRoomId, socket.id, candidateId);
+
+      const result = submitVote(code, socket.id, votedForName);
       if (!result) {
         callback?.({ success: false, error: 'Invalid vote' });
         return;
       }
-      
+
       callback?.({ success: true });
       emitRoomUpdate(io, result);
-      
-      if (result.currentPhase === PHASES.ROUND_RESULTS) {
-        emitPhaseChange(io, result);
-      }
     });
-    
-    /**
-     * Proceed from round results to next round
-     */
-    socket.on('proceed_from_results', (_, callback) => {
-      if (!currentRoomId) {
-        callback?.({ success: false, error: 'Not in a room' });
-        return;
-      }
-      
-      const room = getRoom(currentRoomId);
-      if (!room || room.founderId !== socket.id) {
-        callback?.({ success: false, error: 'Only founder can proceed' });
-        return;
-      }
-      
-      const result = proceedFromResults(currentRoomId);
-      if (!result) {
-        callback?.({ success: false, error: 'Cannot proceed' });
-        return;
-      }
-      
-      callback?.({ success: true });
-      emitRoomUpdate(io, result);
-      emitPhaseChange(io, result);
-    });
-    
-    /**
-     * Handle disconnect
-     */
+
     socket.on('disconnect', () => {
       console.log(`Player disconnected: ${socket.id}`);
-      
+
       const room = playerDisconnect(socket.id);
       if (room) {
+        currentRoomCode = null;
         emitRoomUpdate(io, room);
-        
-        // Cleanup after delay
         setTimeout(() => {
-          cleanupRoom(room.roomId);
-        }, 60000); // 1 minute
+          cleanupRoom(room.code);
+        }, 60000);
       }
     });
   });
 }
 
 /**
- * Emit personalized room state to each player
+ * Emit personalized room state to each player in the room
  */
 function emitRoomUpdate(io, room) {
   for (const player of room.players) {
-    const view = getPlayerView(room.roomId, player.id);
-    io.to(player.id).emit('room_state_update', view);
+    const view = getPlayerView(room.code, player.id);
+    if (view) {
+      io.to(player.id).emit('room_state_update', view);
+    }
   }
-}
-
-/**
- * Emit phase change to all players in room
- */
-function emitPhaseChange(io, room) {
-  io.to(room.roomId).emit('phase_change', {
-    phase: room.currentPhase,
-    roundNumber: room.roundNumber
-  });
 }

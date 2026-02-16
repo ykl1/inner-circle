@@ -1,75 +1,68 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-// Socket URL: use env var, or same origin (when frontend is served from backend)
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
-
-// Debounce delay for reconnection (wait for stable connection)
 const RECONNECT_DEBOUNCE_MS = 500;
 
-/**
- * Custom hook for Socket.io connection
- */
-export function useSocket(onRoomUpdate, onPhaseChange, onReconnect) {
+export function useSocket(onRoomUpdate, onPhaseChange, onReconnect, onGameEndedWhileAway, onRoomDissolved) {
   const socketRef = useRef(null);
   const onConnectCallbacks = useRef([]);
   const isFirstConnect = useRef(true);
   const reconnectDebounceTimer = useRef(null);
-  
+
   useEffect(() => {
-    // Create socket connection
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling']
     });
-    
+
     const socket = socketRef.current;
-    
+
     socket.on('connect', () => {
       console.log('Connected to server:', socket.id);
-      
-      // Fire any waiting callbacks (for initial connection)
       onConnectCallbacks.current.forEach(cb => cb());
       onConnectCallbacks.current = [];
-      
-      // Handle reconnection (not the first connect)
+
       if (isFirstConnect.current) {
         isFirstConnect.current = false;
       } else {
-        // Debounce reconnection to wait for stable connection
         if (reconnectDebounceTimer.current) {
           clearTimeout(reconnectDebounceTimer.current);
         }
-        
         reconnectDebounceTimer.current = setTimeout(() => {
           console.log('Stable reconnection detected, triggering sync...');
           onReconnect?.();
         }, RECONNECT_DEBOUNCE_MS);
       }
     });
-    
+
     socket.on('disconnect', () => {
       console.log('Disconnected from server');
-      // Clear debounce timer on disconnect (connection not stable yet)
       if (reconnectDebounceTimer.current) {
         clearTimeout(reconnectDebounceTimer.current);
         reconnectDebounceTimer.current = null;
       }
     });
-    
+
     socket.on('room_state_update', (data) => {
-      console.log('Room state update:', data);
       onRoomUpdate?.(data);
     });
-    
+
     socket.on('phase_change', (data) => {
-      console.log('Phase change:', data);
       onPhaseChange?.(data);
     });
-    
+
+    socket.on('game_ended_while_away', () => {
+      onGameEndedWhileAway?.();
+    });
+
+    socket.on('room_dissolved', () => {
+      onRoomDissolved?.();
+    });
+
     socket.on('connect_error', (error) => {
       console.error('Connection error:', error);
     });
-    
+
     return () => {
       if (reconnectDebounceTimer.current) {
         clearTimeout(reconnectDebounceTimer.current);
@@ -77,23 +70,21 @@ export function useSocket(onRoomUpdate, onPhaseChange, onReconnect) {
       socket.disconnect();
     };
   }, []);
-  
-  // Helper to wait for socket connection
+
   const waitForConnection = useCallback(() => {
     return new Promise((resolve) => {
-      const socket = socketRef.current;
-      if (socket?.connected) {
+      const s = socketRef.current;
+      if (s?.connected) {
         resolve();
       } else {
         onConnectCallbacks.current.push(resolve);
       }
     });
   }, []);
-  
-  // Create room
-  const createRoom = useCallback((playerName) => {
+
+  const createRoom = useCallback((playerName, category = 'dating') => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('create_room', { playerName }, (response) => {
+      socketRef.current?.emit('create_room', { playerName, category }, (response) => {
         if (response.success) {
           resolve(response);
         } else {
@@ -102,11 +93,10 @@ export function useSocket(onRoomUpdate, onPhaseChange, onReconnect) {
       });
     });
   }, []);
-  
-  // Join room
-  const joinRoom = useCallback((roomId, playerName) => {
+
+  const joinRoom = useCallback((roomCode, playerName) => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('join_room', { roomId, playerName }, (response) => {
+      socketRef.current?.emit('join_room', { roomCode: (roomCode || '').toUpperCase(), playerName }, (response) => {
         if (response.success) {
           resolve(response);
         } else {
@@ -115,24 +105,16 @@ export function useSocket(onRoomUpdate, onPhaseChange, onReconnect) {
       });
     });
   }, []);
-  
-  // Rejoin room after refresh (with timeout and connection check)
-  const rejoinRoom = useCallback((roomId, playerName) => {
+
+  const rejoinRoom = useCallback((roomCode, playerName) => {
     return new Promise((resolve, reject) => {
       const socket = socketRef.current;
-      
-      // Check if socket exists and is connected
       if (!socket || !socket.connected) {
         reject(new Error('Socket not connected'));
         return;
       }
-      
-      // Set timeout to prevent hanging forever
-      const timeout = setTimeout(() => {
-        reject(new Error('Rejoin timeout'));
-      }, 5000);
-      
-      socket.emit('rejoin_room', { roomId, playerName }, (response) => {
+      const timeout = setTimeout(() => reject(new Error('Rejoin timeout')), 5000);
+      socket.emit('rejoin_room', { roomCode: (roomCode || '').toUpperCase(), playerName }, (response) => {
         clearTimeout(timeout);
         if (response.success) {
           resolve(response);
@@ -142,102 +124,67 @@ export function useSocket(onRoomUpdate, onPhaseChange, onReconnect) {
       });
     });
   }, []);
-  
-  // Update settings
-  const updateSettings = useCallback((settings) => {
-    socketRef.current?.emit('update_settings', settings);
+
+  const leaveRoom = useCallback((roomCode, playerName) => {
+    socketRef.current?.emit('leave_room', { roomCode: (roomCode || '').toUpperCase(), playerName });
   }, []);
-  
-  // Start game
+
   const startGame = useCallback(() => {
     return new Promise((resolve, reject) => {
       socketRef.current?.emit('start_game', {}, (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error));
-        }
+        if (response.success) resolve(response);
+        else reject(new Error(response.error));
       });
     });
   }, []);
-  
-  // Submit flex selection
-  const submitFlex = useCallback((selectedCardIds) => {
+
+  const submitSelfPositioning = useCallback((positions) => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('submit_flex', { selectedCardIds }, (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error));
-        }
+      socketRef.current?.emit('submit_self_positioning', { positions }, (response) => {
+        if (response.success) resolve(response);
+        else reject(new Error(response.error));
       });
     });
   }, []);
-  
-  // Submit sabotage
-  const submitSabotage = useCallback((redCardId) => {
+
+  const submitSabotage = useCallback((deltas) => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('submit_sabotage', { redCardId }, (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error));
-        }
+      socketRef.current?.emit('submit_sabotage', { deltas }, (response) => {
+        if (response.success) resolve(response);
+        else reject(new Error(response.error));
       });
     });
   }, []);
-  
-  // Finish pitch (with expected index to prevent race condition)
+
   const finishPitch = useCallback((expectedIndex) => {
     return new Promise((resolve, reject) => {
       socketRef.current?.emit('finish_pitch', { expectedIndex }, (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error));
-        }
+        if (response.success) resolve(response);
+        else reject(new Error(response.error));
       });
     });
   }, []);
-  
-  // Cast vote
-  const castVote = useCallback((candidateId) => {
+
+  const submitVote = useCallback((votedForName) => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('cast_vote', { candidateId }, (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error));
-        }
+      socketRef.current?.emit('submit_vote', { votedForName }, (response) => {
+        if (response.success) resolve(response);
+        else reject(new Error(response.error));
       });
     });
   }, []);
-  
-  // Proceed from results
-  const proceedFromResults = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      socketRef.current?.emit('proceed_from_results', {}, (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error));
-        }
-      });
-    });
-  }, []);
-  
+
   return {
     socket: socketRef.current,
     waitForConnection,
     createRoom,
     joinRoom,
     rejoinRoom,
-    updateSettings,
+    leaveRoom,
     startGame,
-    submitFlex,
+    submitSelfPositioning,
     submitSabotage,
     finishPitch,
-    castVote,
-    proceedFromResults
+    submitVote
   };
 }

@@ -12,37 +12,33 @@ export function PlayerAvatar({ player, size = 'normal', showStatus = false }) {
   
   return (
     <div className="relative flex flex-col items-center gap-1">
-      {/* Crown for founder */}
       {player.isFounder && (
-        <div className="absolute -top-3 text-game-gold text-lg">
+        <div className="absolute -top-3 text-lg" style={{ color: 'var(--color-text-primary)' }}>
           👑
         </div>
       )}
-      
-      {/* Avatar circle */}
-      <div className={`
-        ${sizeClasses[size]}
-        rounded-full bg-game-purple flex items-center justify-center
-        font-bold text-white border-2 border-white/30
-        ${!player.isConnected ? 'opacity-50' : ''}
-      `}>
+      <div
+        className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold border-2`}
+        style={{
+          background: 'var(--color-brand)',
+          color: 'var(--color-text-primary)',
+          borderColor: 'var(--color-border-subtle)',
+          opacity: player.isConnected ? 1 : 0.6,
+        }}
+      >
         {initial}
       </div>
-      
-      {/* Name */}
-      <div className={`
-        text-white text-center truncate max-w-[80px]
-        ${size === 'small' ? 'text-xs' : 'text-sm'}
-      `}>
+      <div
+        className={`text-center truncate max-w-[80px] ${size === 'small' ? 'text-xs' : 'text-sm'}`}
+        style={{ color: 'var(--color-text-primary)' }}
+      >
         {player.name}
       </div>
-      
-      {/* Status indicator */}
       {showStatus && (
-        <div className={`
-          w-2 h-2 rounded-full absolute bottom-4 right-0
-          ${player.isConnected ? 'bg-game-green' : 'bg-gray-500'}
-        `} />
+        <div
+          className="w-2 h-2 rounded-full absolute bottom-4 right-0"
+          style={{ background: player.isConnected ? 'var(--color-success)' : 'var(--color-muted)' }}
+        />
       )}
     </div>
   );
@@ -53,14 +49,17 @@ export function PlayerAvatar({ player, size = 'normal', showStatus = false }) {
  */
 export function PlayerList({ players, currentPlayerId }) {
   return (
-    <div className="flex flex-wrap gap-4 justify-center">
+    <div className="flex flex-wrap justify-center" style={{ gap: 'var(--space-md)' }}>
       {players.map(player => (
         <div
           key={player.id}
-          className={`
-            p-3 rounded-xl bg-white/5 border border-white/10
-            ${player.id === currentPlayerId ? 'ring-2 ring-game-purple' : ''}
-          `}
+          className="p-3 rounded-xl"
+          style={{
+            background: 'var(--color-bg-card)',
+            border: '1px solid var(--color-border-subtle)',
+            borderColor: player.id === currentPlayerId ? 'var(--color-border-active)' : undefined,
+            boxShadow: player.id === currentPlayerId ? '0 0 0 2px var(--color-border-active)' : undefined,
+          }}
         >
           <PlayerAvatar player={player} showStatus />
         </div>

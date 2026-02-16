@@ -1,6 +1,6 @@
-# Inner Circle
+# Pick Me
 
-A real-time multiplayer party game where players pitch themselves to join an exclusive group while sabotaging each other with hidden flaws.
+A real-time multiplayer party game where players pitch themselves as the perfect date while sabotaging each other's dials.
 
 ## Tech Stack
 
@@ -40,28 +40,38 @@ npm run dev:server
 npm run dev:client
 ```
 
+### Troubleshooting: Port 3001 already in use
+
+If you see `EADDRINUSE: address already in use 0.0.0.0:3001`, a previous server process is still running. Free the port:
+
+```bash
+# Find and kill the process using port 3001 (macOS/Linux)
+lsof -i :3001
+kill <PID>   # use the PID from the first column
+```
+
+Or in one line: `kill $(lsof -t -i :3001)`
+
 ### Playing the Game
 
 1. Open http://localhost:5173 in multiple browser tabs/windows
-2. First player creates a room and becomes the Founder
+2. First player creates a room and becomes the Judge
 3. Other players join using the 4-character room code
-4. Founder configures game settings and starts when ready
+4. Judge starts when at least 3 players (1 Judge + 2 candidates) are in the room
 
 ## Game Flow
 
-1. **Lobby**: Players join, Founder sets category and group capacity
-2. **Flex Phase**: Candidates choose 2 green (strength) cards
-3. **Sabotage Phase**: Each candidate gives 1 red (flaw) card to a random target
-4. **Pitch Phase**: Candidates take turns presenting their 3-card hand
-5. **Voting Phase**: Judges vote for one candidate (Founder breaks ties)
-6. **Round Results**: Winner joins the Inner Circle (becomes a judge)
-7. **Repeat** until group capacity is reached
-8. **Game Over**: Winners and Losers screens displayed
+1. **Lobby**: Players join, Judge sees room code and starts when ready
+2. **Self-Positioning**: Candidates set 3 dials (1–10) for their "date" profile
+3. **Sabotage**: Each candidate gets 6 points to move a rival's dials
+4. **Pitch**: Candidates take turns presenting their (possibly sabotaged) dials
+5. **Voting**: Judge picks one candidate
+6. **Game Over**: Winner, losers, and Judge see results + Sabotage Map
 
 ## Project Structure
 
 ```
-inner-circle/
+pick-me/
 ├── client/                 # React Frontend
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
@@ -76,20 +86,18 @@ inner-circle/
 │       ├── cards.js        # Card definitions
 │       ├── socketHandlers.js
 │       └── utils.js
-└── inner_circle_game.md    # Full game specification
+└── inner_circle_game.md    # Legacy spec (renamed from Inner Circle)
 ```
 
 ## MVP Features
 
 - [x] Room creation and joining
-- [x] Founder controls (category, capacity)
-- [x] Card dealing (4 green, 2 red per candidate)
-- [x] Flex selection (2 greens)
-- [x] Blind sabotage system
+- [x] Judge (host) starts game
+- [x] Self-positioning dials (3 cards per candidate)
+- [x] Sabotage (6 points to move target's dials)
 - [x] Turn-based pitching
-- [x] Voting with automatic tie-break
-- [x] Multi-round progression
-- [x] Winners/Losers end screens
+- [x] Judge votes for one candidate
+- [x] Game Over with Sabotage Map
 - [x] Session persistence (survives browser refresh)
 - [x] Leave room functionality
 
@@ -98,9 +106,9 @@ inner-circle/
 See [DEPLOY.md](./DEPLOY.md) for full deployment guide.
 
 **Quick overview:**
-- **Frontend**: Vercel (auto-deploys on git push)
+- **Frontend**: Served from Express (single deploy)
 - **Backend**: AWS EC2 t3.micro + PM2 (auto-deploys via GitHub Actions)
 
 ```bash
-git push  # Deploys both frontend and backend automatically
+git push  # Deploys via GitHub Actions
 ```

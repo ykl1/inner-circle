@@ -1,7 +1,7 @@
 {
-  "name": "inner-circle-server",
+  "name": "pick-me-server",
   "version": "1.0.0",
-  "description": "Inner Circle game server with Socket.io",
+  "description": "Pick Me game server with Socket.io",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

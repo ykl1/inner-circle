@@ -21,7 +21,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/inner-circle
+            cd ~/pick-me
             git pull origin main
             
             # Build frontend
@@ -36,5 +36,5 @@ jobs:
             # Install server dependencies and restart
             cd ../server
             npm install --production
-            pm2 restart inner-circle-server || pm2 start ecosystem.config.cjs --env production
+            pm2 restart pick-me-server || pm2 start ecosystem.config.cjs --env production
             pm2 save

@@ -1,157 +1,113 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useGame } from '../context/GameContext';
-import { PitchHand } from '../components/Card';
-import { PlayerAvatar } from '../components/PlayerAvatar';
+import { DialCard } from '../components/DialCard';
 
-/**
- * Pitching screen - watch/give pitches
- */
 export function PitchScreen() {
   const { gameState, finishPitch } = useGame();
-  
   const [showMyHand, setShowMyHand] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
-  
+
   const pitchOrder = gameState?.pitchOrder || [];
-  const currentPitcherIndex = gameState?.currentPitcherIndex || 0;
-  const currentPitcher = pitchOrder[currentPitcherIndex];
-  const currentPitcherHand = gameState?.currentPitcherHand;
-  const myPitchHand = gameState?.myPitchHand;
-  const roundNumber = gameState?.roundNumber || 1;
-  const players = gameState?.players || [];
-  
-  const isMyTurn = currentPitcher?.id === gameState?.myId;
-  const isFounder = gameState?.isFounder;
-  const canAdvance = isMyTurn || isFounder;
-  const isCandidate = gameState?.isCandidate;
-  
-  const handleFinishPitch = async () => {
+  const currentIndex = gameState?.currentPitcherIndex ?? 0;
+  const currentPitcherName = pitchOrder[currentIndex];
+  const currentPitcherHand = useMemo(() => {
+    const p = gameState?.players?.find(x => x.name === currentPitcherName);
+    return p?.hand || [];
+  }, [gameState?.players, currentPitcherName]);
+
+  const myHand = useMemo(() => {
+    const p = gameState?.players?.find(x => x.name === gameState?.playerName);
+    return p?.hand || [];
+  }, [gameState?.players, gameState?.playerName]);
+
+  const isJudge = gameState?.isJudge;
+  const isMyTurn = currentPitcherName === gameState?.playerName;
+  const isCandidate = !isJudge;
+  const canAdvance = isMyTurn || isJudge;
+
+  const handleFinish = async () => {
     setIsFinishing(true);
     try {
-      // Pass current index to prevent race condition if founder and pitcher click simultaneously
-      await finishPitch(currentPitcherIndex);
+      await finishPitch(currentIndex);
     } catch (err) {
-      console.error('Failed to finish pitch:', err);
+      console.error(err);
     } finally {
       setIsFinishing(false);
     }
   };
-  
-  // Progress indicator
-  const progress = pitchOrder.map((pitcher, index) => ({
-    ...pitcher,
-    isDone: index < currentPitcherIndex,
-    isCurrent: index === currentPitcherIndex,
-    isUpcoming: index > currentPitcherIndex
-  }));
-  
+
+  const displayHand = showMyHand && isCandidate ? myHand : currentPitcherHand;
+
   return (
-    <div className="min-h-screen flex flex-col p-4">
-      {/* Header */}
+    <div className="min-h-screen flex flex-col px-6 pt-8 pb-8" style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}>
       <div className="text-center py-4">
-        <div className="text-white/60 text-sm">Round {roundNumber}</div>
-        <h1 className="text-2xl font-bold text-white mb-1">
-          Pitch Phase
+        <h1 className="text-title mb-1" style={{ color: 'var(--color-text-primary)' }}>
+          {isMyTurn ? "You're up. Pitch your date." : 'Pitch Phase'}
         </h1>
       </div>
-      
-      {/* Progress bar */}
-      <div className="flex justify-center gap-2 mb-6">
-        {progress.map((pitcher, index) => (
+
+      <div className="flex justify-center gap-2 mb-4" style={{ gap: 'var(--space-sm)' }}>
+        {pitchOrder.map((name, idx) => (
           <div
-            key={pitcher.id}
-            className={`
-              w-10 h-10 rounded-full flex items-center justify-center
-              text-sm font-bold transition-all
-              ${pitcher.isDone 
-                ? 'bg-game-green text-white' 
-                : pitcher.isCurrent 
-                  ? 'bg-game-purple text-white ring-2 ring-white' 
-                  : 'bg-white/10 text-white/50'
-              }
-            `}
-            title={pitcher.name}
+            key={name}
+            className="px-3 py-1 rounded-full text-label"
+            style={{
+              background: idx < currentIndex ? 'var(--color-success)' : idx === currentIndex ? 'var(--color-brand)' : 'var(--color-muted)',
+              color: idx <= currentIndex ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
+              border: idx === currentIndex ? '2px solid var(--color-dial-thumb)' : undefined,
+            }}
           >
-            {pitcher.isDone ? '✓' : index + 1}
+            {idx + 1}
           </div>
         ))}
       </div>
-      
-      {/* Current pitcher */}
-      <div className="card mb-4">
-        <div className="text-center mb-4">
-          <div className="text-white/60 text-sm mb-2">
-            {isMyTurn ? "It's your turn!" : 'Now pitching:'}
-          </div>
-          <div className={`
-            text-2xl font-bold
-            ${isMyTurn ? 'text-game-purple' : 'text-white'}
-          `}>
-            {currentPitcher?.name}
-          </div>
+
+      <div className="card" style={{ marginBottom: 'var(--space-md)' }}>
+        <div className="text-center mb-3">
+          {showMyHand && isCandidate ? (
+            <span className="text-label" style={{ color: 'var(--color-text-primary)', fontSize: '18px' }}>Your hand</span>
+          ) : (
+            <>
+              <span className="text-body" style={{ color: 'var(--color-text-secondary)' }}>Now pitching: </span>
+              <span className="text-label" style={{ color: 'var(--color-text-primary)', fontSize: '18px' }}>{currentPitcherName}</span>
+            </>
+          )}
         </div>
-        
-        {/* Pitcher's cards */}
-        {currentPitcherHand && (
-          <PitchHand 
-            cards={currentPitcherHand}
-            label="Their pitch hand:"
-          />
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          {displayHand.map(card => (
+            <DialCard
+              key={card.cardId}
+              label={card.label}
+              position={card.finalPosition ?? card.selfPosition ?? 5}
+              readOnly
+            />
+          ))}
+        </div>
       </div>
-      
-      {/* Toggle to view own hand */}
-      {isCandidate && myPitchHand && !isMyTurn && (
-        <div className="mb-4">
-          <button
-            onClick={() => setShowMyHand(!showMyHand)}
-            className="btn bg-white/10 hover:bg-white/20 w-full"
-          >
-            {showMyHand ? 'Hide My Hand' : 'View My Hand'}
+
+      {isCandidate && myHand.length > 0 && !isMyTurn && (
+        <div style={{ marginBottom: 'var(--space-md)' }}>
+          <button onClick={() => setShowMyHand(!showMyHand)} className="btn btn-secondary w-full">
+            {showMyHand ? 'Watch Pitch' : 'View My Hand'}
           </button>
-          
-          {showMyHand && (
-            <div className="mt-3 card">
-              <PitchHand 
-                cards={myPitchHand}
-                label="Your pitch hand:"
-              />
-            </div>
-          )}
         </div>
       )}
-      
-      {/* Finish pitch button */}
+
       {canAdvance && (
-        <div className="mt-auto pt-4">
-          {isFounder && !isMyTurn && (
-            <div className="text-white/60 text-sm text-center mb-2">
-              👑 Founder override available
-            </div>
-          )}
+        <div className="mt-auto" style={{ paddingTop: 'var(--space-lg)' }}>
           <button
-            onClick={handleFinishPitch}
+            onClick={handleFinish}
             disabled={isFinishing}
-            className={`btn w-full text-lg ${
-              isFounder && !isMyTurn 
-                ? 'bg-red-500 hover:bg-red-600 active:scale-95' 
-                : 'bg-game-purple hover:bg-purple-600 active:scale-95'
-            }`}
+            className={`btn w-full ${isJudge && !isMyTurn ? 'btn-danger' : 'btn-primary'}`}
           >
-            {isFinishing 
-              ? 'Moving to next...' 
-              : isMyTurn 
-                ? 'Finish My Pitch' 
-                : 'Skip to Next (Override)'
-            }
+            {isFinishing ? 'Moving...' : isJudge && !isMyTurn ? 'Skip to Next (Override)' : 'Finish Pitch'}
           </button>
         </div>
       )}
-      
-      {/* Non-pitcher waiting message */}
+
       {!canAdvance && (
-        <div className="mt-auto text-center text-white/60">
-          Wait for {currentPitcher?.name} to finish their pitch...
+        <div className="mt-auto text-center text-body" style={{ color: 'var(--color-text-secondary)' }}>
+          Wait for {currentPitcherName} to finish their pitch...
         </div>
       )}
     </div>

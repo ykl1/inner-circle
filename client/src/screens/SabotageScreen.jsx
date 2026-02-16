@@ -1,141 +1,205 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useGame } from '../context/GameContext';
-import { Card, PitchHand } from '../components/Card';
-import { PlayerAvatar } from '../components/PlayerAvatar';
+import { SabotageSlider } from '../components/SabotageSlider';
 
-/**
- * Sabotage screen - give 1 red card to target
- */
+const SABOTAGE_BUDGET = 6;
+
 export function SabotageScreen() {
   const { gameState, submitSabotage } = useGame();
-  
-  const [selectedRedId, setSelectedRedId] = useState(null);
+  const [deltas, setDeltas] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const myHand = gameState?.myHand;
-  const redCards = myHand?.reds || [];
-  const hasSubmitted = gameState?.hasSubmittedSabotage;
-  const sabotageTarget = gameState?.sabotageTarget;
-  const roundNumber = gameState?.roundNumber || 1;
-  
-  const handleSubmit = async () => {
-    if (!selectedRedId) return;
-    
+  const [activeCardId, setActiveCardId] = useState(null);
+  const [showZeroConfirm, setShowZeroConfirm] = useState(false);
+
+  const targetCards = gameState?.sabotageTargetCards || [];
+  const targetName = gameState?.sabotageTargetName;
+  const hasSubmitted = gameState?.players?.find(p => p.name === gameState?.playerName)?.sabotageSubmitted;
+  const candidates = gameState?.players?.filter(p => !p.isJudge) || [];
+  const submittedCount = candidates.filter(p => p.sabotageSubmitted).length;
+
+  const totalUsed = useMemo(() => {
+    return targetCards.reduce((sum, c) => sum + Math.abs(deltas[c.cardId] ?? 0), 0);
+  }, [targetCards, deltas]);
+
+  const remaining = SABOTAGE_BUDGET - totalUsed;
+
+  const setDelta = (cardId, value) => {
+    setDeltas(prev => ({ ...prev, [cardId]: value }));
+  };
+
+  const handleUnleashClick = () => {
+    if (isSubmitting) return;
+    if (totalUsed === 0) {
+      setShowZeroConfirm(true);
+      return;
+    }
+    doSubmit();
+  };
+
+  const doSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await submitSabotage(selectedRedId);
+      await submitSabotage(
+        targetCards.map(c => ({ cardId: c.cardId, delta: deltas[c.cardId] ?? 0 }))
+      );
     } catch (err) {
-      console.error('Failed to submit sabotage:', err);
+      console.error(err);
     } finally {
       setIsSubmitting(false);
+      setShowZeroConfirm(false);
     }
   };
-  
-  // Founder/Judge view
-  if (gameState?.isJudge && !gameState?.isCandidate) {
+
+  const handleConfirmSkipSabotage = () => {
+    doSubmit();
+  };
+
+  const handleCancelZeroConfirm = () => {
+    setShowZeroConfirm(false);
+  };
+
+  if (gameState?.isJudge) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="card text-center max-w-sm">
-          <div className="text-4xl mb-4">🎭</div>
-          <h2 className="text-xl font-bold text-white mb-2">
-            Sabotage Phase
-          </h2>
-          <p className="text-white/60">
-            Candidates are sabotaging each other...
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 pt-8 pb-8" style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}>
+        <div className="card-dark max-w-sm text-center">
+          <h2 className="text-title mb-2" style={{ color: 'var(--color-text-primary)' }}>The sabotage is happening.</h2>
+          <p className="text-body mb-4" style={{ color: 'var(--color-text-secondary)' }}>Candidates are repositioning each other&apos;s dials.</p>
+          <p className="text-caption">
+            {submittedCount} of {candidates.length} candidates have submitted
           </p>
-          <div className="mt-4 text-game-purple">
-            You are a Judge
-          </div>
         </div>
       </div>
     );
   }
-  
-  // Already submitted view
+
   if (hasSubmitted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="card text-center max-w-sm">
-          <div className="text-4xl mb-4">🎭</div>
-          <h2 className="text-xl font-bold text-white mb-2">
-            Sabotage Sent!
-          </h2>
-          <p className="text-white/60">
-            Waiting for other candidates...
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 pt-8 pb-8" style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}>
+        <div className="card-dark max-w-sm text-center">
+          <div className="text-4xl mb-4">✓</div>
+          <h2 className="text-title mb-2" style={{ color: 'var(--color-text-primary)' }}>Waiting for others...</h2>
+          <p className="text-caption">
+            {submittedCount} of {candidates.length} players have submitted
           </p>
         </div>
       </div>
     );
   }
-  
+
   return (
-    <div className="min-h-screen flex flex-col p-4">
-      {/* Header */}
-      <div className="text-center py-4">
-        <div className="text-white/60 text-sm">Round {roundNumber}</div>
-        <h1 className="text-2xl font-bold text-game-red mb-1">
-          Sabotage Your Rival!
-        </h1>
-        <p className="text-white/60">
-          Give them one of your red cards
-        </p>
-      </div>
-      
-      {/* Target info */}
-      {sabotageTarget && (
-        <div className="card mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="text-2xl">🎯</div>
-            <div>
-              <div className="text-white/60 text-sm">Your Target</div>
-              <div className="text-white font-bold text-lg">
-                {sabotageTarget.name}
-              </div>
+    <div
+      className="min-h-screen flex flex-col px-6 pt-8 pb-8 relative overflow-hidden"
+      style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}
+    >
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          background: 'radial-gradient(ellipse at center, transparent 40%, #3D000012 100%)',
+        }}
+      />
+
+      {/* Zero-point confirmation modal — app theme */}
+      {showZeroConfirm && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          style={{ background: 'var(--color-bg-overlay)' }}
+        >
+          <div
+            className="p-6 max-w-sm w-full rounded-2xl"
+            style={{
+              background: 'var(--color-bg-card)',
+              border: '1px solid var(--color-border-subtle)',
+              borderRadius: '16px',
+              boxShadow: '0px 8px 40px rgba(0, 0, 0, 0.6)',
+            }}
+          >
+            <h3 className="text-title mb-3" style={{ color: 'var(--color-text-primary)' }}>
+              Are you sure you don&apos;t want to sabotage?
+            </h3>
+            <p className="text-body mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+              You haven&apos;t moved any of their dials. Skip and submit zero changes?
+            </p>
+            <div className="flex gap-3" style={{ gap: 'var(--space-md)' }}>
+              <button onClick={handleCancelZeroConfirm} className="btn btn-secondary flex-1">
+                Cancel
+              </button>
+              <button onClick={handleConfirmSkipSabotage} className="btn btn-danger flex-1">
+                Yes, skip sabotage
+              </button>
             </div>
-          </div>
-          
-          <div className="text-white/60 text-sm mb-2">
-            Their chosen strengths:
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {sabotageTarget.selectedGreens?.map(card => (
-              <Card
-                key={card.id}
-                card={card}
-                size="small"
-                disabled
-              />
-            ))}
           </div>
         </div>
       )}
-      
-      {/* Red cards to choose from */}
-      <div className="flex-1">
-        <div className="text-white/60 text-sm mb-2 text-center">
-          Choose a flaw to give them:
-        </div>
-        <div className="grid grid-cols-1 gap-3">
-          {redCards.map(card => (
-            <Card
-              key={card.id}
-              card={card}
-              selected={selectedRedId === card.id}
-              onClick={() => setSelectedRedId(card.id)}
-            />
-          ))}
-        </div>
-      </div>
-      
-      {/* Submit button */}
-      <div className="pt-4">
-        <button
-          onClick={handleSubmit}
-          disabled={!selectedRedId || isSubmitting}
-          className="btn-danger w-full text-lg"
+
+      <div className="relative z-10 flex flex-col flex-1">
+        <h1 className="text-title text-center mb-1" style={{ color: 'var(--color-text-primary)' }}>
+          Sabotage {targetName}&apos;s Profile
+        </h1>
+        <p className="text-body text-center mb-4 max-w-sm mx-auto" style={{ color: 'var(--color-text-secondary)' }}>
+          Ruin their profile. Use your 6 points to move their dials — 1 point per position.
+        </p>
+
+        {/* Prominent points counter: used and remaining, real-time */}
+        <div
+          className="flex items-center justify-center gap-6 py-4 mb-2 rounded-xl"
+          style={{
+            background: 'var(--color-bg-card-dark)',
+            border: '1px solid var(--color-sab-border)',
+            paddingLeft: 'var(--space-lg)',
+            paddingRight: 'var(--space-lg)',
+          }}
         >
-          {isSubmitting ? 'Sending...' : 'Send Sabotage'}
-        </button>
+          <div className="text-center">
+            <div className="text-mono text-label" style={{ color: 'var(--color-sab-delta)' }}>
+              {totalUsed} / {SABOTAGE_BUDGET}
+            </div>
+            <div className="text-caption" style={{ color: 'var(--color-text-secondary)' }}>points used</div>
+          </div>
+          <div className="text-center">
+            <div className="text-mono text-label" style={{ color: remaining === 0 ? 'var(--color-text-secondary)' : 'var(--color-sab-dot-active)' }}>
+              {remaining}
+            </div>
+            <div className="text-caption" style={{ color: 'var(--color-text-secondary)' }}>remaining</div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col" style={{ gap: 'var(--space-lg)' }}>
+          {targetCards.map(card => {
+            const parts = (card.label || '').split(/\s*↔\s*/);
+            const leftLabel = parts[0]?.trim() || 'Low';
+            const rightLabel = parts[1]?.trim() || 'High';
+            const basePosition = card.selfPosition ?? 5;
+            return (
+              <div key={card.cardId} className="card-dark">
+                <SabotageSlider
+                  leftLabel={leftLabel}
+                  rightLabel={rightLabel}
+                  basePosition={basePosition}
+                  delta={deltas[card.cardId] ?? 0}
+                  totalUsed={totalUsed}
+                  onChange={(v) => setDelta(card.cardId, v)}
+                  onDragStart={() => setActiveCardId(card.cardId)}
+                  onDragEnd={() => setActiveCardId(null)}
+                  isActive={activeCardId === card.cardId}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="text-caption text-center py-2">
+          {submittedCount} of {candidates.length} players have submitted
+        </p>
+
+        <div style={{ paddingTop: 'var(--space-lg)' }}>
+          <button
+            onClick={handleUnleashClick}
+            disabled={isSubmitting}
+            className="w-full btn btn-danger"
+          >
+            {isSubmitting ? 'Submitting...' : 'Unleash'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,591 +1,415 @@
 /**
- * Game State Machine and Room Management
+ * Game State Machine and Room Management — Pick Me
  * Server is authoritative for all game state
  */
 
-import { shuffle, generateRoomCode, assignSabotageTargets } from './utils.js';
-import { createDeck } from './cards.js';
+import { shuffle, generateRoomCode } from './utils.js';
+import { dealHand, getCategory } from './cards.js';
 
-// Game phases
 export const PHASES = {
   LOBBY: 'LOBBY',
-  FLEX_SELECTION: 'FLEX_SELECTION',
+  SELF_POSITIONING: 'SELF_POSITIONING',
   SABOTAGE: 'SABOTAGE',
   PITCHING: 'PITCHING',
   VOTING: 'VOTING',
-  ROUND_RESULTS: 'ROUND_RESULTS',
   GAME_OVER: 'GAME_OVER'
 };
 
-// In-memory storage for all rooms
 const rooms = new Map();
 
 /**
- * Create a new room
- * @param {string} founderId - Socket ID of the founder
- * @param {string} founderName - Display name of the founder
- * @returns {Object} Room state
+ * Assign sabotage targets: randomized circular chain by name.
+ * Each player sabotages the next; last sabotages first.
  */
-export function createRoom(founderId, founderName) {
-  let roomCode = generateRoomCode();
-  
-  // Ensure unique room code
-  while (rooms.has(roomCode)) {
-    roomCode = generateRoomCode();
+function assignSabotageTargets(candidates) {
+  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  shuffled.forEach((player, i) => {
+    player.sabotageTarget = shuffled[(i + 1) % shuffled.length].name;
+  });
+}
+
+/**
+ * Build hand entry for a player from dealt cards (selfPosition default 5)
+ */
+function buildHand(cards) {
+  return cards.map(c => ({
+    cardId: c.id,
+    label: c.label,
+    selfPosition: 5,
+    finalPosition: null,
+    sabotageApplied: null
+  }));
+}
+
+/**
+ * Create a new room. Creator is the Judge (host).
+ */
+export function createRoom(hostSocketId, playerName, categoryId = 'dating') {
+  let code = generateRoomCode();
+  while (rooms.has(code)) {
+    code = generateRoomCode();
   }
-  
+
   const room = {
-    roomId: roomCode,
-    currentPhase: PHASES.LOBBY,
-    
-    // Players
+    code,
+    category: categoryId,
+    phase: PHASES.LOBBY,
+    hostSocketId,
     players: [{
-      id: founderId,
-      name: founderName.trim(),
-      isFounder: true,
+      id: hostSocketId,
+      name: playerName.trim(),
+      isJudge: true,
+      hand: null,
+      sabotageTarget: null,
+      sabotageSubmitted: false,
+      selfPositioningSubmitted: false,
+      pitchDone: false,
+      isWinner: false,
       isConnected: true
     }],
-    founderId: founderId,
-    
-    // Game config (set in lobby)
-    categoryId: 'startup',
-    groupCapacity: 4,
-    
-    // Round state
-    roundNumber: 0,
-    judges: [founderId], // Founder starts as the only judge
-    candidates: [], // Set when game starts
-    
-    // Card state
-    deck: createDeck(),
-    playerHands: {}, // playerId -> { greens: [], reds: [] }
-    
-    // Phase-specific state
-    flexSelections: {}, // playerId -> [cardId, cardId]
-    sabotageTargets: {}, // playerId -> targetId
-    sabotageSelections: {}, // playerId -> redCardId
-    pitchHands: {}, // playerId -> [card, card, card] (final 3-card hand)
-    pitchOrder: [], // Order of candidates for pitching
+    pitchOrder: [],
     currentPitcherIndex: 0,
-    
-    // Voting state
-    votes: {}, // judgeId -> candidateId
-    roundWinner: null
+    judgeVote: null,
+    sabotageMap: null,
+    createdAt: Date.now()
   };
-  
-  rooms.set(roomCode, room);
+
+  rooms.set(code, room);
   return room;
 }
 
-/**
- * Get a room by ID
- * @param {string} roomId 
- * @returns {Object|null}
- */
-export function getRoom(roomId) {
-  return rooms.get(roomId) || null;
+export function getRoom(roomCode) {
+  const normalized = (roomCode || '').toUpperCase();
+  return rooms.get(normalized) || null;
 }
 
 /**
- * Add a player to a room
- * @param {string} roomId 
- * @param {string} playerId - Socket ID
- * @param {string} playerName 
- * @returns {{ room: Object }|{ error: string }} Room or error
+ * Join room. Fails if name taken (case-insensitive) or game not in LOBBY.
  */
-export function joinRoom(roomId, playerId, playerName) {
-  const room = rooms.get(roomId);
-  if (!room) return { error: 'Room not found' };
-  if (room.currentPhase !== PHASES.LOBBY) return { error: 'Game already started' };
-  
-  // Check if player already exists (reconnect by socket ID)
-  const existingPlayer = room.players.find(p => p.id === playerId);
-  if (existingPlayer) {
-    existingPlayer.isConnected = true;
-    return { room };
-  }
-  
-  // Check for duplicate name (case-insensitive)
+export function joinRoom(roomCode, playerId, playerName) {
+  const code = roomCode.toUpperCase();
+  const room = rooms.get(code);
+  if (!room) return { error: 'room_not_found' };
+  if (room.phase !== PHASES.LOBBY) return { error: 'game_in_progress' };
+
   const normalizedName = playerName.trim().toLowerCase();
-  const duplicateName = room.players.find(
+  const duplicate = room.players.find(
     p => p.name.trim().toLowerCase() === normalizedName
   );
-  if (duplicateName) {
-    return { error: 'Name already taken in this room' };
-  }
-  
+  if (duplicate) return { error: 'name_taken' };
+
   room.players.push({
     id: playerId,
     name: playerName.trim(),
-    isFounder: false,
+    isJudge: false,
+    hand: null,
+    sabotageTarget: null,
+    sabotageSubmitted: false,
+    selfPositioningSubmitted: false,
+    pitchDone: false,
+    isWinner: false,
     isConnected: true
   });
-  
+
   return { room };
 }
 
 /**
- * Update room settings (founder only)
+ * Rejoin by name; migrate socket ID. Returns { room, oldPlayerId } or null.
+ * Caller should check room.phase === GAME_OVER to emit game_ended_while_away.
  */
-export function updateRoomSettings(roomId, settings) {
-  const room = rooms.get(roomId);
+export function rejoinRoom(roomCode, newSocketId, playerName) {
+  const code = roomCode.toUpperCase();
+  const room = rooms.get(code);
   if (!room) return null;
-  
-  if (settings.categoryId) room.categoryId = settings.categoryId;
-  if (settings.groupCapacity) room.groupCapacity = settings.groupCapacity;
-  
-  return room;
-}
 
-/**
- * Start the game
- * @param {string} roomId 
- * @returns {Object|null} Updated room or null if failed
- */
-export function startGame(roomId) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.currentPhase !== PHASES.LOBBY) return null;
-  
-  // Validate player count vs group capacity
-  // Survival constraint: Total Players >= Group Capacity + 1
-  if (room.players.length < room.groupCapacity + 1) {
-    return null;
-  }
-  
-  // Set candidates (all non-founder players)
-  room.candidates = room.players
-    .filter(p => !p.isFounder)
-    .map(p => p.id);
-  
-  room.roundNumber = 1;
-  
-  // Deal cards and start flex phase
-  dealCards(room);
-  room.currentPhase = PHASES.FLEX_SELECTION;
-  
-  return room;
-}
-
-/**
- * Deal cards to all candidates
- * Each candidate gets 4 Green and 2 Red
- */
-function dealCards(room) {
-  const { deck, candidates } = room;
-  
-  // Shuffle decks
-  deck.greenDeck = shuffle(deck.greenDeck);
-  deck.redDeck = shuffle(deck.redDeck);
-  
-  for (const candidateId of candidates) {
-    // Get current hand or create new
-    const currentHand = room.playerHands[candidateId] || { greens: [], reds: [] };
-    
-    // Calculate how many cards needed
-    const greensNeeded = 4 - currentHand.greens.length;
-    const redsNeeded = 2 - currentHand.reds.length;
-    
-    // Draw greens
-    const newGreens = deck.greenDeck.splice(0, greensNeeded);
-    currentHand.greens = [...currentHand.greens, ...newGreens];
-    
-    // Draw reds
-    const newReds = deck.redDeck.splice(0, redsNeeded);
-    currentHand.reds = [...currentHand.reds, ...newReds];
-    
-    room.playerHands[candidateId] = currentHand;
-  }
-}
-
-/**
- * Submit flex selection for a player
- * @param {string} roomId 
- * @param {string} playerId 
- * @param {string[]} selectedCardIds - Array of 2 green card IDs
- * @returns {Object|null}
- */
-export function submitFlex(roomId, playerId, selectedCardIds) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.currentPhase !== PHASES.FLEX_SELECTION) return null;
-  if (!room.candidates.includes(playerId)) return null;
-  if (selectedCardIds.length !== 2) return null;
-  
-  // Validate that player owns these cards
-  const hand = room.playerHands[playerId];
-  const hasCards = selectedCardIds.every(cardId => 
-    hand.greens.some(c => c.id === cardId)
+  const normalizedName = playerName.trim().toLowerCase();
+  const player = room.players.find(
+    p => p.name.trim().toLowerCase() === normalizedName
   );
-  if (!hasCards) return null;
-  
-  room.flexSelections[playerId] = selectedCardIds;
-  
-  // Check if all candidates have submitted
-  const allSubmitted = room.candidates.every(id => room.flexSelections[id]);
-  if (allSubmitted) {
-    startSabotagePhase(room);
+  if (!player) return null;
+
+  const oldId = player.id;
+  player.id = newSocketId;
+  player.isConnected = true;
+
+  if (room.hostSocketId === oldId) {
+    room.hostSocketId = newSocketId;
   }
-  
+
+  return { room, oldPlayerId: oldId };
+}
+
+/**
+ * Leave room. If Judge leaves, room is dissolved (removed). Returns { room, dissolved }.
+ */
+export function leaveRoom(roomCode, playerName) {
+  const code = roomCode.toUpperCase();
+  const room = rooms.get(code);
+  if (!room) return { room: null, dissolved: false };
+
+  const normalizedName = playerName.trim().toLowerCase();
+  const index = room.players.findIndex(
+    p => p.name.trim().toLowerCase() === normalizedName
+  );
+  if (index === -1) return { room, dissolved: false };
+
+  const wasHost = room.players[index].id === room.hostSocketId;
+  room.players.splice(index, 1);
+
+  if (room.players.length === 0) {
+    rooms.delete(code);
+    return { room: null, dissolved: true };
+  }
+
+  if (wasHost) {
+    rooms.delete(code);
+    return { room, dissolved: true };
+  }
+
+  return { room, dissolved: false };
+}
+
+/**
+ * Start game (Judge only). Min 3 players (1 Judge + 2 candidates). Deal hands, phase → SELF_POSITIONING.
+ */
+export function startGame(roomCode) {
+  const room = getRoom(roomCode);
+  if (!room || room.phase !== PHASES.LOBBY) return null;
+  if (room.hostSocketId !== room.players.find(p => p.id === room.hostSocketId)?.id) return null;
+
+  const candidates = room.players.filter(p => !p.isJudge);
+  if (candidates.length < 2) return null;
+
+  room.phase = PHASES.SELF_POSITIONING;
+  room.category = room.category || 'dating';
+
+  for (const p of candidates) {
+    const cards = dealHand(room.category);
+    p.hand = buildHand(cards);
+  }
+
   return room;
 }
 
 /**
- * Start the sabotage phase
+ * Submit self-positioning. positions: [{ cardId, position }], each 0–10. When all submitted → SABOTAGE.
  */
-function startSabotagePhase(room) {
-  room.currentPhase = PHASES.SABOTAGE;
-  room.sabotageTargets = assignSabotageTargets(room.candidates);
-  room.sabotageSelections = {};
-}
+export function submitSelfPositioning(roomCode, playerId, positions) {
+  const room = getRoom(roomCode);
+  if (!room || room.phase !== PHASES.SELF_POSITIONING) return null;
 
-/**
- * Submit sabotage selection
- * @param {string} roomId 
- * @param {string} playerId 
- * @param {string} redCardId - The red card to give to target
- * @returns {Object|null}
- */
-export function submitSabotage(roomId, playerId, redCardId) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.currentPhase !== PHASES.SABOTAGE) return null;
-  if (!room.candidates.includes(playerId)) return null;
-  
-  // Validate player owns this red card
-  const hand = room.playerHands[playerId];
-  const hasCard = hand.reds.some(c => c.id === redCardId);
-  if (!hasCard) return null;
-  
-  room.sabotageSelections[playerId] = redCardId;
-  
-  // Check if all candidates have submitted
-  const allSubmitted = room.candidates.every(id => room.sabotageSelections[id]);
-  if (allSubmitted) {
-    finalizePitchHands(room);
-    startPitchingPhase(room);
+  const player = room.players.find(p => p.id === playerId);
+  if (!player || player.isJudge) return null;
+  if (!player.hand || player.hand.length !== 3) return null;
+  if (!Array.isArray(positions) || positions.length !== 3) return null;
+
+  const cardIds = new Set(player.hand.map(c => c.cardId));
+  for (const { cardId, position } of positions) {
+    const pos = Number(position);
+    if (!cardIds.has(cardId) || !Number.isInteger(pos) || pos < 0 || pos > 10) return null;
+    const card = player.hand.find(c => c.cardId === cardId);
+    if (card) card.selfPosition = pos;
   }
-  
+
+  player.selfPositioningSubmitted = true;
+
+  const candidates = room.players.filter(p => !p.isJudge);
+  const allSubmitted = candidates.every(p => p.selfPositioningSubmitted);
+  if (allSubmitted) {
+    assignSabotageTargets(candidates);
+    room.phase = PHASES.SABOTAGE;
+  }
+
   return room;
 }
 
 /**
- * Build final 3-card pitch hands for each candidate
- * 2 Greens (self-selected) + 1 Red (received from saboteur)
+ * Submit sabotage. deltas: [{ cardId, delta }]. Total |delta| must be 0–6. CardIds must belong to target.
  */
-function finalizePitchHands(room) {
-  for (const candidateId of room.candidates) {
-    // Get the 2 green cards they selected
-    const selectedGreenIds = room.flexSelections[candidateId];
-    const hand = room.playerHands[candidateId];
-    const selectedGreens = hand.greens.filter(c => selectedGreenIds.includes(c.id));
-    
-    // Find who sabotaged this candidate and get the red card
-    let receivedRed = null;
-    for (const [sabotagerId, targetId] of Object.entries(room.sabotageTargets)) {
-      if (targetId === candidateId) {
-        const redCardId = room.sabotageSelections[sabotagerId];
-        const sabotagerHand = room.playerHands[sabotagerId];
-        receivedRed = sabotagerHand.reds.find(c => c.id === redCardId);
-        
-        // Remove the red card from sabotager's hand
-        sabotagerHand.reds = sabotagerHand.reds.filter(c => c.id !== redCardId);
-        break;
-      }
+export function submitSabotage(roomCode, playerId, deltas) {
+  const room = getRoom(roomCode);
+  if (!room || room.phase !== PHASES.SABOTAGE) return null;
+
+  const player = room.players.find(p => p.id === playerId);
+  if (!player || player.isJudge) return null;
+  const target = room.players.find(p => p.name === player.sabotageTarget);
+  if (!target || !target.hand) return null;
+
+  const targetCardIds = new Set(target.hand.map(c => c.cardId));
+  let totalAbs = 0;
+  const applied = [];
+  for (const { cardId, delta } of deltas) {
+    const d = Number(delta);
+    if (!Number.isInteger(d) || !targetCardIds.has(cardId)) return null;
+    totalAbs += Math.abs(d);
+    applied.push({ cardId, delta: d });
+  }
+  if (totalAbs > 6) return null;
+
+  for (const { cardId, delta } of applied) {
+    const card = target.hand.find(c => c.cardId === cardId);
+    if (card) {
+      const final = Math.max(0, Math.min(10, card.selfPosition + delta));
+      card.finalPosition = final;
+      card.sabotageApplied = final - card.selfPosition;
     }
-    
-    // Remove used greens from hand
-    hand.greens = hand.greens.filter(c => !selectedGreenIds.includes(c.id));
-    
-    // Build pitch hand
-    room.pitchHands[candidateId] = [...selectedGreens, receivedRed];
   }
+
+  player.sabotageSubmitted = true;
+
+  const candidates = room.players.filter(p => !p.isJudge);
+  const allSubmitted = candidates.every(p => p.sabotageSubmitted);
+  if (allSubmitted) {
+    room.pitchOrder = shuffle(candidates.map(p => p.name));
+    room.currentPitcherIndex = 0;
+    room.phase = PHASES.PITCHING;
+  }
+
+  return room;
 }
 
 /**
- * Start the pitching phase
+ * Finish pitch. expectedIndex must match current. When all pitched → VOTING.
  */
-function startPitchingPhase(room) {
-  room.currentPhase = PHASES.PITCHING;
-  room.pitchOrder = shuffle([...room.candidates]);
-  room.currentPitcherIndex = 0;
-}
+export function finishPitch(roomCode, playerId, expectedIndex) {
+  const room = getRoom(roomCode);
+  if (!room || room.phase !== PHASES.PITCHING) return null;
 
-/**
- * Finish current pitch and move to next pitcher
- * @param {string} roomId 
- * @param {string} playerId - Must be current pitcher or founder
- * @param {number} expectedIndex - The pitcher index the client expects to advance from
- * @returns {Object|null}
- */
-export function finishPitch(roomId, playerId, expectedIndex) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.currentPhase !== PHASES.PITCHING) return null;
-  
-  // Validate expected index matches current state (prevents race condition)
-  if (typeof expectedIndex === 'number' && room.currentPitcherIndex !== expectedIndex) {
-    // Already advanced by another request, silently succeed (idempotent)
-    return room;
-  }
-  
-  const currentPitcher = room.pitchOrder[room.currentPitcherIndex];
-  
-  // Only current pitcher or founder can advance
-  if (playerId !== currentPitcher && playerId !== room.founderId) {
-    return null;
-  }
-  
+  if (room.currentPitcherIndex !== expectedIndex) return room;
+
+  const currentName = room.pitchOrder[room.currentPitcherIndex];
+  const currentPlayer = room.players.find(p => p.name === currentName);
+  const isHost = room.hostSocketId === playerId;
+  if (!currentPlayer || (currentPlayer.id !== playerId && !isHost)) return null;
+
+  currentPlayer.pitchDone = true;
   room.currentPitcherIndex++;
-  
-  // Check if all pitches are done
+
+  const candidates = room.players.filter(p => !p.isJudge);
   if (room.currentPitcherIndex >= room.pitchOrder.length) {
-    startVotingPhase(room);
+    room.phase = PHASES.VOTING;
   }
-  
+
   return room;
 }
 
 /**
- * Start the voting phase
+ * Judge submits vote. votedForName must be a candidate. Phase → GAME_OVER, build sabotageMap.
  */
-function startVotingPhase(room) {
-  room.currentPhase = PHASES.VOTING;
-  room.votes = {};
-}
+export function submitVote(roomCode, playerId, votedForName) {
+  const room = getRoom(roomCode);
+  if (!room || room.phase !== PHASES.VOTING) return null;
+  if (room.hostSocketId !== playerId) return null;
 
-/**
- * Cast a vote
- * @param {string} roomId 
- * @param {string} judgeId 
- * @param {string} candidateId 
- * @returns {Object|null}
- */
-export function castVote(roomId, judgeId, candidateId) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.currentPhase !== PHASES.VOTING) return null;
-  
-  // Validate judge
-  if (!room.judges.includes(judgeId)) return null;
-  
-  // Validate candidate
-  if (!room.candidates.includes(candidateId)) return null;
-  
-  room.votes[judgeId] = candidateId;
-  
-  // Check if all judges have voted
-  const allVoted = room.judges.every(id => room.votes[id]);
-  if (allVoted) {
-    determineRoundWinner(room);
-  }
-  
+  const candidates = room.players.filter(p => !p.isJudge);
+  const winner = candidates.find(p => p.name === votedForName);
+  if (!winner) return null;
+
+  room.judgeVote = votedForName;
+  winner.isWinner = true;
+  room.phase = PHASES.GAME_OVER;
+
+  room.sabotageMap = room.players
+    .filter(p => !p.isJudge && p.hand)
+    .map(p => ({
+      candidateName: p.name,
+      saboteurName: (() => {
+        const saboteur = room.players.find(x => x.sabotageTarget === p.name);
+        return saboteur ? saboteur.name : null;
+      })(),
+      cards: p.hand.map(c => ({
+        cardId: c.cardId,
+        label: c.label,
+        selfPosition: c.selfPosition,
+        finalPosition: c.finalPosition,
+        sabotageApplied: c.sabotageApplied
+      }))
+    }));
+
   return room;
 }
 
 /**
- * Determine the round winner based on votes
- * Founder's vote breaks ties
+ * Personalized view for one player. Hand visibility and sabotageMap per spec.
  */
-function determineRoundWinner(room) {
-  // Count votes
-  const voteCounts = {};
-  for (const candidateId of room.candidates) {
-    voteCounts[candidateId] = 0;
-  }
-  
-  for (const candidateId of Object.values(room.votes)) {
-    voteCounts[candidateId]++;
-  }
-  
-  // Find max votes
-  const maxVotes = Math.max(...Object.values(voteCounts));
-  const topCandidates = Object.entries(voteCounts)
-    .filter(([_, count]) => count === maxVotes)
-    .map(([id, _]) => id);
-  
-  let winner;
-  if (topCandidates.length === 1) {
-    winner = topCandidates[0];
-  } else {
-    // Tie: Founder's choice wins
-    const founderChoice = room.votes[room.founderId];
-    if (topCandidates.includes(founderChoice)) {
-      winner = founderChoice;
-    } else {
-      // Edge case: founder didn't vote for any tied candidate
-      // Pick first in tie (shouldn't happen normally)
-      winner = topCandidates[0];
-    }
-  }
-  
-  room.roundWinner = winner;
-  room.currentPhase = PHASES.ROUND_RESULTS;
-}
-
-/**
- * Proceed to next round or end game
- * @param {string} roomId 
- * @returns {Object|null}
- */
-export function proceedFromResults(roomId) {
-  const room = rooms.get(roomId);
+export function getPlayerView(roomCode, playerId) {
+  const room = getRoom(roomCode);
   if (!room) return null;
-  if (room.currentPhase !== PHASES.ROUND_RESULTS) return null;
-  
-  const winner = room.roundWinner;
-  
-  // Move winner to judges
-  room.judges.push(winner);
-  room.candidates = room.candidates.filter(id => id !== winner);
-  
-  // Clear winner's cards
-  delete room.playerHands[winner];
-  delete room.pitchHands[winner];
-  
-  // Check game end condition
-  // Game ends when judges.length === groupCapacity
-  if (room.judges.length >= room.groupCapacity) {
-    room.currentPhase = PHASES.GAME_OVER;
-    return room;
-  }
-  
-  // Prepare next round
-  room.roundNumber++;
-  room.roundWinner = null;
-  room.flexSelections = {};
-  room.sabotageTargets = {};
-  room.sabotageSelections = {};
-  room.pitchHands = {};
-  room.pitchOrder = [];
-  room.currentPitcherIndex = 0;
-  room.votes = {};
-  
-  // Replenish cards for remaining candidates
-  dealCards(room);
-  
-  room.currentPhase = PHASES.FLEX_SELECTION;
-  
-  return room;
-}
 
-/**
- * Get sanitized room state for a specific player
- * Hides other players' hands and sensitive info
- */
-export function getPlayerView(roomId, playerId) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  
   const player = room.players.find(p => p.id === playerId);
   if (!player) return null;
-  
-  // Base state visible to all
+
+  const categoryMeta = getCategory(room.category) || {};
+
   const view = {
-    roomId: room.roomId,
-    currentPhase: room.currentPhase,
-    categoryId: room.categoryId,
-    groupCapacity: room.groupCapacity,
-    roundNumber: room.roundNumber,
+    phase: room.phase,
+    roomCode: room.code,
+    category: room.category,
+    categoryMeta,
+    playerName: player.name,
+    isJudge: player.isJudge,
     players: room.players.map(p => ({
-      id: p.id,
       name: p.name,
-      isFounder: p.isFounder,
-      isConnected: p.isConnected
+      id: p.id,
+      isJudge: p.isJudge,
+      isWinner: p.isWinner ?? false,
+      selfPositioningSubmitted: p.selfPositioningSubmitted ?? false,
+      sabotageSubmitted: p.sabotageSubmitted ?? false,
+      pitchDone: p.pitchDone ?? false,
+      isConnected: p.isConnected ?? true,
+      hand: null
     })),
-    founderId: room.founderId,
-    judges: room.judges,
-    candidates: room.candidates,
-    
-    // Player's own info
-    myId: playerId,
-    isFounder: player.isFounder,
-    isJudge: room.judges.includes(playerId),
-    isCandidate: room.candidates.includes(playerId),
-    myHand: room.playerHands[playerId] || null,
-    
-    // Phase-specific visible info
-    hasSubmittedFlex: !!room.flexSelections[playerId],
-    hasSubmittedSabotage: !!room.sabotageSelections[playerId]
+    pitchOrder: room.pitchOrder,
+    currentPitcherIndex: room.currentPitcherIndex,
+    judgeVote: room.judgeVote,
+    sabotageMap: room.phase === PHASES.GAME_OVER ? room.sabotageMap : null,
+    sabotageTargetName: room.phase === PHASES.SABOTAGE && !player.isJudge ? player.sabotageTarget : null,
+    sabotageTargetCards: null
   };
-  
-  // Phase-specific additions
-  if (room.currentPhase === PHASES.SABOTAGE && room.candidates.includes(playerId)) {
-    const targetId = room.sabotageTargets[playerId];
-    const targetFlexIds = room.flexSelections[targetId];
-    const targetHand = room.playerHands[targetId];
-    
-    view.sabotageTarget = {
-      id: targetId,
-      name: room.players.find(p => p.id === targetId)?.name,
-      selectedGreens: targetHand.greens.filter(c => targetFlexIds.includes(c.id))
-    };
+
+  if (room.phase === PHASES.SABOTAGE && !player.isJudge && player.sabotageTarget) {
+    const target = room.players.find(p => p.name === player.sabotageTarget);
+    view.sabotageTargetCards = target?.hand ? target.hand.map(c => ({ cardId: c.cardId, label: c.label, selfPosition: c.selfPosition })) : null;
   }
-  
-  if (room.currentPhase === PHASES.PITCHING) {
-    view.pitchOrder = room.pitchOrder.map(id => ({
-      id,
-      name: room.players.find(p => p.id === id)?.name
-    }));
-    view.currentPitcherIndex = room.currentPitcherIndex;
-    
-    const currentPitcherId = room.pitchOrder[room.currentPitcherIndex];
-    if (currentPitcherId) {
-      view.currentPitcherHand = room.pitchHands[currentPitcherId];
-    }
-    
-    // Include player's own pitch hand
-    if (room.pitchHands[playerId]) {
-      view.myPitchHand = room.pitchHands[playerId];
-    }
-  }
-  
-  if (room.currentPhase === PHASES.VOTING) {
-    // Show all pitch hands for voting reference
-    view.candidatePitchHands = {};
-    for (const candidateId of room.candidates) {
-      const candidateName = room.players.find(p => p.id === candidateId)?.name;
-      view.candidatePitchHands[candidateId] = {
-        name: candidateName,
-        cards: room.pitchHands[candidateId]
-      };
-    }
-    view.hasVoted = !!room.votes[playerId];
-  }
-  
-  if (room.currentPhase === PHASES.ROUND_RESULTS) {
-    view.roundWinner = {
-      id: room.roundWinner,
-      name: room.players.find(p => p.id === room.roundWinner)?.name
-    };
-    view.voteCounts = {};
-    for (const candidateId of room.candidates.concat([room.roundWinner])) {
-      view.voteCounts[candidateId] = Object.values(room.votes).filter(v => v === candidateId).length;
+
+  const currentPitcherName = room.pitchOrder[room.currentPitcherIndex];
+
+  for (let i = 0; i < room.players.length; i++) {
+    const p = room.players[i];
+    const viewPlayer = view.players[i];
+
+    if (room.phase === PHASES.SELF_POSITIONING) {
+      if (p.id === playerId) {
+        viewPlayer.hand = p.hand ? p.hand.map(c => ({ ...c, finalPosition: undefined, sabotageApplied: undefined })) : null;
+      }
+    } else if (room.phase === PHASES.SABOTAGE) {
+      if (p.id === playerId && p.sabotageTarget) {
+        const target = room.players.find(x => x.name === p.sabotageTarget);
+        viewPlayer.hand = target?.hand ? target.hand.map(c => ({ cardId: c.cardId, label: c.label })) : null;
+      }
+    } else if (room.phase === PHASES.PITCHING) {
+      if (p.name === currentPitcherName && p.hand) {
+        viewPlayer.hand = p.hand.map(c => ({ ...c }));
+      } else if (p.id === playerId && p.hand) {
+        viewPlayer.hand = p.hand.map(c => ({ ...c }));
+      }
+    } else if (room.phase === PHASES.VOTING) {
+      if (player.isJudge && !p.isJudge && p.hand) {
+        viewPlayer.hand = p.hand.map(c => ({ ...c }));
+      } else if (!player.isJudge && p.id === playerId && p.hand) {
+        viewPlayer.hand = p.hand.map(c => ({ ...c }));
+      }
+    } else if (room.phase === PHASES.GAME_OVER) {
+      viewPlayer.hand = null;
     }
   }
-  
-  if (room.currentPhase === PHASES.GAME_OVER) {
-    view.winners = room.judges.map(id => ({
-      id,
-      name: room.players.find(p => p.id === id)?.name,
-      isFounder: id === room.founderId
-    }));
-    view.losers = room.players
-      .filter(p => !room.judges.includes(p.id))
-      .map(p => ({
-        id: p.id,
-        name: p.name
-      }));
-  }
-  
+
   return view;
 }
 
-/**
- * Handle player disconnect
- */
 export function playerDisconnect(playerId) {
-  for (const [roomId, room] of rooms.entries()) {
+  for (const [, room] of rooms.entries()) {
     const player = room.players.find(p => p.id === playerId);
     if (player) {
       player.isConnected = false;
@@ -596,111 +420,12 @@ export function playerDisconnect(playerId) {
 }
 
 /**
- * Delete empty rooms
+ * Cleanup: remove room if all players disconnected (called after 60s delay)
  */
-export function cleanupRoom(roomId) {
-  const room = rooms.get(roomId);
+export function cleanupRoom(roomCode) {
+  const code = (roomCode || '').toUpperCase();
+  const room = rooms.get(code);
   if (room && room.players.every(p => !p.isConnected)) {
-    rooms.delete(roomId);
+    rooms.delete(code);
   }
-}
-
-/**
- * Rejoin a room with a new socket ID
- * Matches player by name and room ID
- * @param {string} roomId 
- * @param {string} newSocketId - New socket ID
- * @param {string} playerName - Player's name to match
- * @returns {Object|null} Room and old player ID if successful
- */
-export function rejoinRoom(roomId, newSocketId, playerName) {
-  const room = rooms.get(roomId);
-  if (!room) return null;
-  
-  // Find player by name (case-insensitive)
-  const normalizedName = playerName.trim().toLowerCase();
-  const player = room.players.find(p => p.name.trim().toLowerCase() === normalizedName);
-  if (!player) return null;
-  
-  const oldPlayerId = player.id;
-  
-  // Update player's socket ID
-  player.id = newSocketId;
-  player.isConnected = true;
-  
-  // Update founderId if this player is the founder
-  if (room.founderId === oldPlayerId) {
-    room.founderId = newSocketId;
-  }
-  
-  // Update judges array
-  const judgeIndex = room.judges.indexOf(oldPlayerId);
-  if (judgeIndex !== -1) {
-    room.judges[judgeIndex] = newSocketId;
-  }
-  
-  // Update candidates array
-  const candidateIndex = room.candidates.indexOf(oldPlayerId);
-  if (candidateIndex !== -1) {
-    room.candidates[candidateIndex] = newSocketId;
-  }
-  
-  // Update playerHands
-  if (room.playerHands[oldPlayerId]) {
-    room.playerHands[newSocketId] = room.playerHands[oldPlayerId];
-    delete room.playerHands[oldPlayerId];
-  }
-  
-  // Update flexSelections
-  if (room.flexSelections[oldPlayerId]) {
-    room.flexSelections[newSocketId] = room.flexSelections[oldPlayerId];
-    delete room.flexSelections[oldPlayerId];
-  }
-  
-  // Update sabotageTargets (both as key and value)
-  if (room.sabotageTargets[oldPlayerId]) {
-    room.sabotageTargets[newSocketId] = room.sabotageTargets[oldPlayerId];
-    delete room.sabotageTargets[oldPlayerId];
-  }
-  for (const [key, value] of Object.entries(room.sabotageTargets)) {
-    if (value === oldPlayerId) {
-      room.sabotageTargets[key] = newSocketId;
-    }
-  }
-  
-  // Update sabotageSelections
-  if (room.sabotageSelections[oldPlayerId]) {
-    room.sabotageSelections[newSocketId] = room.sabotageSelections[oldPlayerId];
-    delete room.sabotageSelections[oldPlayerId];
-  }
-  
-  // Update pitchHands
-  if (room.pitchHands[oldPlayerId]) {
-    room.pitchHands[newSocketId] = room.pitchHands[oldPlayerId];
-    delete room.pitchHands[oldPlayerId];
-  }
-  
-  // Update pitchOrder
-  const pitchOrderIndex = room.pitchOrder.indexOf(oldPlayerId);
-  if (pitchOrderIndex !== -1) {
-    room.pitchOrder[pitchOrderIndex] = newSocketId;
-  }
-  
-  // Update votes (both as key and value)
-  if (room.votes[oldPlayerId]) {
-    room.votes[newSocketId] = room.votes[oldPlayerId];
-    delete room.votes[oldPlayerId];
-  }
-  for (const [key, value] of Object.entries(room.votes)) {
-    if (value === oldPlayerId) {
-      room.votes[key] = newSocketId;
-    }
-  }
-  
-  // Update roundWinner if needed
-  if (room.roundWinner === oldPlayerId) {
-    room.roundWinner = newSocketId;
-  }
-  
-  return { room, oldPlayerId };
 }

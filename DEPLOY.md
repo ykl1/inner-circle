@@ -23,7 +23,7 @@
 
 1. Go to AWS Console → EC2 → Launch Instance
 2. Configure:
-   - **Name**: `inner-circle-server`
+   - **Name**: `pick-me-server`
    - **AMI**: Amazon Linux 2023 (free tier)
    - **Instance type**: t3.micro (free tier eligible)
    - **Key pair**: Create or select existing
@@ -55,8 +55,8 @@ sudo npm install -g pm2
 
 # Clone repository
 cd ~
-git clone https://github.com/YOUR_USERNAME/inner-circle.git
-cd inner-circle
+git clone https://github.com/YOUR_USERNAME/pick-me.git
+cd pick-me
 
 # Build frontend
 cd client
@@ -125,16 +125,16 @@ GitHub Actions will:
 pm2 logs
 
 # Restart server
-pm2 restart inner-circle-server
+pm2 restart pick-me-server
 
 # Check status
 pm2 status
 
 # Manual deploy (if needed)
-cd ~/inner-circle
+cd ~/pick-me
 git pull origin main
 cd client && npm install && npm run build && cp -r dist ../server/public
-cd ../server && npm install --production && pm2 restart inner-circle-server
+cd ../server && npm install --production && pm2 restart pick-me-server
 ```
 
 ### Locally
@@ -169,4 +169,4 @@ EC2_HOST=YOUR_IP EC2_KEY=~/.ssh/your-key.pem ./deploy.sh
 
 ### Frontend not updating
 - Make sure `server/public` contains the latest build
-- Try: `pm2 restart inner-circle-server`
+- Try: `pm2 restart pick-me-server`

@@ -1,5 +1,5 @@
 /**
- * Inner Circle Game Server
+ * Pick Me Game Server
  * Express + Socket.io + Static Frontend
  */
 
@@ -10,7 +10,7 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { initSocketHandlers } from './socketHandlers.js';
-import { categories } from './cards.js';
+import { listCategories } from './cards.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,7 +44,7 @@ app.get('/health', (req, res) => {
 
 // Get available categories
 app.get('/api/categories', (req, res) => {
-  res.json(categories);
+  res.json(listCategories());
 });
 
 // Serve index.html for all non-API routes (SPA support)
@@ -63,7 +63,7 @@ initSocketHandlers(io);
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════╗
-║         INNER CIRCLE GAME SERVER          ║
+║           PICK ME GAME SERVER             ║
 ╠═══════════════════════════════════════════╣
 ║  Server running on port ${PORT}              ║
 ║  Socket.io ready for connections          ║
