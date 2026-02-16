@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGame } from '../context/GameContext';
 import { PlayerList } from '../components/PlayerAvatar';
+import { HowToPlayCard } from './JoinScreen';
 
 export function LobbyScreen() {
   const { gameState, startGame } = useGame();
@@ -64,10 +65,12 @@ export function LobbyScreen() {
       )}
 
       {!isJudge && (
-        <div className="card text-center">
+        <div className="card text-center" style={{ marginBottom: 'var(--space-lg)' }}>
           <p className="text-body" style={{ color: 'var(--color-text-secondary)' }}>Waiting for the Judge to start the game...</p>
         </div>
       )}
+
+      <HowToPlayCard />
     </div>
   );
 }

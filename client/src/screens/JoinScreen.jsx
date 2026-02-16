@@ -1,6 +1,42 @@
 import { useState } from 'react';
 import { useGame } from '../context/GameContext';
 
+/** How to Play block — shared by Join and Lobby. Numbers and text in aligned columns. */
+export function HowToPlayCard() {
+  return (
+    <div className="card-no-shadow">
+      <h2 className="text-label mb-4 text-center" style={{ color: 'var(--color-text-primary)' }}>How to Play</h2>
+      <div
+        className="text-body mx-auto"
+        style={{
+          color: 'var(--color-text-secondary)',
+          maxWidth: '360px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-md)',
+        }}
+      >
+        <div className="flex gap-3" style={{ alignItems: 'flex-start' }}>
+          <span className="text-mono flex-shrink-0" style={{ width: '1.5rem', color: 'var(--color-text-primary)' }}>1.</span>
+          <span><strong style={{ color: 'var(--color-text-primary)' }}>Build Your Date:</strong> Set 3 dials across personality spectrums to create the perfect date for the Judge</span>
+        </div>
+        <div className="flex gap-3" style={{ alignItems: 'flex-start' }}>
+          <span className="text-mono flex-shrink-0" style={{ width: '1.5rem', color: 'var(--color-text-primary)' }}>2.</span>
+          <span><strong style={{ color: 'var(--color-text-primary)' }}>Survive Sabotage:</strong> One player is secretly assigned to ruin your profile. You&apos;ll find out who after the vote</span>
+        </div>
+        <div className="flex gap-3" style={{ alignItems: 'flex-start' }}>
+          <span className="text-mono flex-shrink-0" style={{ width: '1.5rem', color: 'var(--color-text-primary)' }}>3.</span>
+          <span><strong style={{ color: 'var(--color-text-primary)' }}>Pitch:</strong> Present your (possibly ruined) profile to the Judge. Sell it. Spin it. Beg if you have to</span>
+        </div>
+        <div className="flex gap-3" style={{ alignItems: 'flex-start' }}>
+          <span className="text-mono flex-shrink-0" style={{ width: '1.5rem', color: 'var(--color-text-primary)' }}>4.</span>
+          <span><strong style={{ color: 'var(--color-text-primary)' }}>Vote:</strong> The Judge picks their favorite date</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Initial screen for creating or joining a room
  */
@@ -70,27 +106,7 @@ export function JoinScreen() {
               </button>
             </div>
 
-            <div className="card-no-shadow">
-              <h2 className="text-label mb-3 text-center" style={{ color: 'var(--color-text-primary)' }}>How to Play</h2>
-              <div className="space-y-2 text-body" style={{ color: 'var(--color-text-secondary)' }}>
-                <div className="flex gap-2">
-                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>1.</span>
-                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Build Your Date</strong> — Set 3 dials to match the Judge&apos;s taste</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>2.</span>
-                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Sabotage</strong> — Use 6 points to move a rival&apos;s dials</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>3.</span>
-                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Pitch</strong> — Take turns presenting your (possibly sabotaged) dials</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-mono" style={{ color: 'var(--color-text-secondary)' }}>4.</span>
-                  <span><strong style={{ color: 'var(--color-text-primary)' }}>Vote</strong> — The Judge picks one date</span>
-                </div>
-              </div>
-            </div>
+            <HowToPlayCard />
           </>
         )}
 
