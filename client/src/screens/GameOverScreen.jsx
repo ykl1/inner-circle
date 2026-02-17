@@ -24,29 +24,32 @@ export function GameOverScreen() {
           overflow: 'hidden',
         }}
       >
+        {/* Header fixed outside scroll so Back buttons are always visible on mobile */}
         <div
-          className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-8"
+          className="flex-shrink-0 flex justify-between items-center px-6"
           style={{
-            paddingTop: 'var(--space-xl)',
+            paddingTop: 'max(var(--space-xl), env(safe-area-inset-top, 0px))',
+            paddingBottom: 'var(--space-md)',
+          }}
+        >
+          <h2 className="text-title" style={{ color: 'var(--color-text-primary)' }}>Sabotage Map</h2>
+          <div className="flex gap-2" style={{ gap: 'var(--space-sm)' }}>
+            <button onClick={() => setShowSabotageMap(false)} className="btn btn-secondary">
+              Back
+            </button>
+            <button onClick={leaveRoom} className="btn btn-secondary">
+              Back to Home
+            </button>
+          </div>
+        </div>
+        <div
+          className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6"
+          style={{
             paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
             WebkitOverflowScrolling: 'touch',
             overscrollBehavior: 'contain',
           }}
         >
-          <div
-            className="flex justify-between items-center mb-4 flex-shrink-0 sticky top-0 z-10 -mx-6 px-6 py-3"
-            style={{ background: 'var(--color-bg-base)' }}
-          >
-            <h2 className="text-title" style={{ color: 'var(--color-text-primary)' }}>Sabotage Map</h2>
-            <div className="flex gap-2" style={{ gap: 'var(--space-sm)' }}>
-              <button onClick={() => setShowSabotageMap(false)} className="btn btn-secondary">
-                Back
-              </button>
-              <button onClick={leaveRoom} className="btn btn-secondary">
-                Back to Home
-              </button>
-            </div>
-          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)', paddingBottom: 'var(--space-2xl)' }}>
             {sabotageMap.map(entry => (
               <div key={entry.candidateName} className="card text-center">
