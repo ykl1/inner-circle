@@ -15,38 +15,55 @@ export function GameOverScreen() {
 
   if (showSabotageMap) {
     return (
-      <div className="min-h-screen flex flex-col px-6 pt-8 pb-8" style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-title" style={{ color: 'var(--color-text-primary)' }}>Sabotage Map</h2>
-          <div className="flex gap-2" style={{ gap: 'var(--space-sm)' }}>
-            <button onClick={() => setShowSabotageMap(false)} className="btn btn-secondary">
-              Back
-            </button>
-            <button onClick={leaveRoom} className="btn btn-secondary">
-              Back to Home
-            </button>
-          </div>
-        </div>
-        <div className="overflow-auto pb-8" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-          {sabotageMap.map(entry => (
-            <div key={entry.candidateName} className="card text-center">
-              <div className="text-label mb-1" style={{ color: 'var(--color-text-primary)' }}>{entry.candidateName}</div>
-              <div className="text-caption mb-3">
-                Sabotaged by: {entry.saboteurName ?? '—'}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-                {entry.cards.map(card => (
-                  <SabotageMapDial
-                    key={card.cardId}
-                    label={card.label}
-                    selfPosition={card.selfPosition}
-                    finalPosition={card.finalPosition}
-                    sabotageApplied={card.sabotageApplied}
-                  />
-                ))}
-              </div>
+      <div
+        className="flex flex-col"
+        style={{
+          background: 'var(--color-bg-base)',
+          minHeight: '100dvh',
+          height: '100dvh',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-8 pb-8"
+          style={{
+            paddingTop: 'var(--space-xl)',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+          }}
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-title" style={{ color: 'var(--color-text-primary)' }}>Sabotage Map</h2>
+            <div className="flex gap-2" style={{ gap: 'var(--space-sm)' }}>
+              <button onClick={() => setShowSabotageMap(false)} className="btn btn-secondary">
+                Back
+              </button>
+              <button onClick={leaveRoom} className="btn btn-secondary">
+                Back to Home
+              </button>
             </div>
-          ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)', paddingBottom: 'var(--space-2xl)' }}>
+            {sabotageMap.map(entry => (
+              <div key={entry.candidateName} className="card text-center">
+                <div className="text-label mb-1" style={{ color: 'var(--color-text-primary)' }}>{entry.candidateName}</div>
+                <div className="text-caption mb-3">
+                  Sabotaged by: {entry.saboteurName ?? '—'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+                  {entry.cards.map(card => (
+                    <SabotageMapDial
+                      key={card.cardId}
+                      label={card.label}
+                      selfPosition={card.selfPosition}
+                      finalPosition={card.finalPosition}
+                      sabotageApplied={card.sabotageApplied}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );

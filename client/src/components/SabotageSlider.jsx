@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 
-const BUDGET = 6;
+const BUDGET = 8;
 const MIN_POS = 0;
 const MAX_POS = 10;
 
@@ -108,52 +108,73 @@ export function SabotageSlider({
 
   return (
     <div className="w-full">
-      <div className="flex justify-between items-center mb-4" style={{ marginBottom: 'var(--space-md)' }}>
-        <span className="text-label" style={{ color: 'var(--color-text-secondary)' }}>
+      <div
+        className="flex justify-between items-start gap-2"
+        style={{ marginBottom: 'var(--space-md)', gap: 'var(--space-sm)' }}
+      >
+        <span
+          className="dial-anchor-label"
+          style={{
+            color: 'var(--color-sab-left)',
+            flex: '0 1 48%',
+            minWidth: 0,
+            textAlign: 'left',
+            fontWeight: 500,
+          }}
+        >
           {leftLabel}
         </span>
-        <span className="text-label text-right" style={{ color: 'var(--color-text-secondary)' }}>
+        <span
+          className="dial-anchor-label"
+          style={{
+            color: 'var(--color-sab-right)',
+            flex: '0 1 48%',
+            minWidth: 0,
+            textAlign: 'right',
+            fontWeight: 500,
+          }}
+        >
           {rightLabel}
         </span>
       </div>
 
-      {/* 0–10 track: gradient, "Their pick" marker, draggable thumb */}
-      <div
-        ref={trackRef}
-        className="relative w-full rounded-full cursor-pointer select-none touch-none"
-        style={{
-          height: '18px',
-          borderRadius: '9px',
-          background: 'linear-gradient(to right, var(--color-sab-left), var(--color-sab-right))',
-        }}
-        onPointerDown={handlePointerDown}
-      >
-        {/* Their pick: fixed marker so delta from original is clear */}
+      <div className="dial-track-touch items-center">
         <div
-          className="absolute top-1/2 -translate-y-1/2 pointer-events-none z-[1]"
+          ref={trackRef}
+          className="relative w-full rounded-full cursor-pointer select-none touch-none flex-1"
           style={{
-            left: `calc(${basePercent * 100}% - 6px)`,
-            width: '12px',
-            height: '12px',
-            borderRadius: '6px',
-            background: 'var(--color-dial-thumb)',
-            border: '2px solid var(--color-sab-right)',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+            height: '18px',
+            borderRadius: '9px',
+            background: 'linear-gradient(to right, var(--color-sab-left), var(--color-sab-right))',
           }}
-        />
-        {/* Thumb: saboteur's chosen position */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-[left] duration-100 z-[2]"
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '16px',
-            left: `calc(${thumbPercent * 100}% - 16px)`,
-            background: 'var(--color-sab-thumb)',
-            border: '1.5px solid var(--color-sab-right)',
-            boxShadow: '0px 2px 12px rgba(139, 26, 26, 0.5)',
-          }}
-        />
+          onPointerDown={handlePointerDown}
+        >
+          <div
+            className="absolute top-1/2 -translate-y-1/2 pointer-events-none z-[1]"
+            style={{
+              left: `calc(${basePercent * 100}% - 6px)`,
+              width: '12px',
+              height: '12px',
+              borderRadius: '6px',
+              background: 'var(--color-dial-thumb)',
+              border: '2px solid var(--color-sab-right)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+            }}
+          />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-[left] duration-100 z-[2]"
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '22px',
+              left: `calc(${thumbPercent * 100}% - 22px)`,
+              transform: 'translateY(-50%)',
+              background: 'var(--color-sab-thumb)',
+              border: '1.5px solid var(--color-sab-right)',
+              boxShadow: '0px 2px 12px rgba(139, 26, 26, 0.5)',
+            }}
+          />
+        </div>
       </div>
 
       {/* Labels row: "Their pick" and delta at original position (easier to see) */}

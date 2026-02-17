@@ -169,7 +169,7 @@ export function initSocketHandlers(io) {
 
       const result = submitSabotage(code, socket.id, deltas);
       if (!result) {
-        callback?.({ success: false, error: 'Invalid sabotage (need exactly 6 points total)' });
+        callback?.({ success: false, error: 'Invalid sabotage (point total must be 0–8)' });
         return;
       }
 

@@ -66,35 +66,52 @@ export function VotingScreen() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col px-6 pt-8 pb-8" style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}>
-      <div className="text-center py-4">
-        <h1 className="text-title mb-1" style={{ color: 'var(--color-text-primary)' }}>Choose Your Date</h1>
-        <p className="text-body" style={{ color: 'var(--color-text-secondary)' }}>Pick the candidate you&apos;d want to go on a date with.</p>
-      </div>
+    <div
+      className="flex flex-col"
+      style={{
+        background: 'var(--color-bg-base)',
+        minHeight: '100dvh',
+        height: '100dvh',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-8 pb-8"
+        style={{
+          paddingTop: 'var(--space-xl)',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+        }}
+      >
+        <div className="text-center py-4">
+          <h1 className="text-title mb-1" style={{ color: 'var(--color-text-primary)' }}>Choose Your Date</h1>
+          <p className="text-body" style={{ color: 'var(--color-text-secondary)' }}>Pick the candidate you&apos;d want to go on a date with.</p>
+        </div>
 
-      <div className="flex-1 overflow-auto" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-        {candidates.map(candidate => (
-          <div key={candidate.name} className="card">
-            <div className="text-label mb-3" style={{ color: 'var(--color-text-primary)', fontSize: '18px' }}>{candidate.name}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
-              {(candidate.hand || []).map(card => (
-                <DialCard
-                  key={card.cardId}
-                  label={card.label}
-                  position={card.finalPosition ?? card.selfPosition ?? 5}
-                  readOnly
-                />
-              ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          {candidates.map(candidate => (
+            <div key={candidate.name} className="card">
+              <div className="text-label mb-3" style={{ color: 'var(--color-text-primary)', fontSize: '18px' }}>{candidate.name}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
+                {(candidate.hand || []).map(card => (
+                  <DialCard
+                    key={card.cardId}
+                    label={card.label}
+                    position={card.finalPosition ?? card.selfPosition ?? 5}
+                    readOnly
+                  />
+                ))}
+              </div>
+              <button
+                onClick={() => handleChoose(candidate.name)}
+                disabled={isVoting}
+                className="btn btn-primary w-full"
+              >
+                Choose {candidate.name}
+              </button>
             </div>
-            <button
-              onClick={() => handleChoose(candidate.name)}
-              disabled={isVoting}
-              className="btn btn-primary w-full"
-            >
-              Choose {candidate.name}
-            </button>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

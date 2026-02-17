@@ -63,7 +63,7 @@ Or in one line: `kill $(lsof -t -i :3001)`
 
 1. **Lobby**: Players join, Judge sees room code and starts when ready
 2. **Self-Positioning**: Candidates set 3 dials (1–10) for their "date" profile
-3. **Sabotage**: Each candidate gets 6 points to move a rival's dials
+3. **Sabotage**: Each candidate gets 8 points to move a rival's dials
 4. **Pitch**: Candidates take turns presenting their (possibly sabotaged) dials
 5. **Voting**: Judge picks one candidate
 6. **Game Over**: Winner, losers, and Judge see results + Sabotage Map
@@ -72,6 +72,7 @@ Or in one line: `kill $(lsof -t -i :3001)`
 
 ```
 pick-me/
+├── official_dial_cards.csv  # Dial card pool (left_anchor, right_anchor, category)
 ├── client/                 # React Frontend
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
@@ -83,7 +84,7 @@ pick-me/
 │   └── src/
 │       ├── index.js        # Express + Socket.io entry
 │       ├── gameState.js    # Game state machine
-│       ├── cards.js        # Card definitions
+│       ├── cards.js        # Dial dealing from CSV
 │       ├── socketHandlers.js
 │       └── utils.js
 └── inner_circle_game.md    # Legacy spec (renamed from Inner Circle)
@@ -94,7 +95,7 @@ pick-me/
 - [x] Room creation and joining
 - [x] Judge (host) starts game
 - [x] Self-positioning dials (3 cards per candidate)
-- [x] Sabotage (6 points to move target's dials)
+- [x] Sabotage (8 points to move target's dials)
 - [x] Turn-based pitching
 - [x] Judge votes for one candidate
 - [x] Game Over with Sabotage Map
@@ -112,3 +113,14 @@ See [DEPLOY.md](./DEPLOY.md) for full deployment guide.
 ```bash
 git push  # Deploys via GitHub Actions
 ```
+
+## Dial card dealing (Build Your Date phase)
+
+Dial cards are loaded from **`official_dial_cards.csv`** at the project root. The file has three columns: `left_anchor`, `right_anchor`, and `category`.
+
+- **Where the data lives**: `official_dial_cards.csv` in the repo root. The server reads it when the Judge starts the game (start of the dealing phase).
+- **1 card per category per hand**: Each of the 3 cards in a player’s hand is drawn from a different category when possible. No two cards in the same hand may share a category unless the pool forces a fallback.
+- **Unique hands**: No two players in the same round receive the same set of three cards. Hand uniqueness is enforced by tracking a signature (sorted card ids) and swapping cards when a duplicate would occur.
+- **Consumed card registry**: The full card pool is shuffled once per round. Once a card is dealt to any player, it is removed from the available pool for the rest of that round and cannot be dealt again.
+- **Category exhaustion fallback**: If there are not enough remaining cards from unused categories to fill a hand, the server relaxes the category constraint for that player only and substitutes a card from the least-represented category already in their hand. This fallback is logged as a warning.
+- **Spectrum labels**: The UI uses `left_anchor` as the label for dial position 1 (left end) and `right_anchor` as the label for position 10 (right end). The client receives a single `label` string in the form `"left_anchor ↔ right_anchor"` for each card.

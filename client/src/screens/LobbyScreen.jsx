@@ -27,7 +27,23 @@ export function LobbyScreen() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col px-6 pt-8 pb-8" style={{ background: 'var(--color-bg-base)', paddingTop: 'var(--space-xl)' }}>
+    <div
+      className="flex flex-col"
+      style={{
+        background: 'var(--color-bg-base)',
+        minHeight: '100dvh',
+        height: '100dvh',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-8 pb-8"
+        style={{
+          paddingTop: 'var(--space-xl)',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+        }}
+      >
       <div className="text-center py-6">
         <h1 className="text-title mb-2" style={{ color: 'var(--color-text-primary)' }}>Room Code</h1>
         <div className="text-mono font-semibold tracking-widest py-2" style={{ fontSize: '28px', color: 'var(--color-brand)' }}>
@@ -71,6 +87,7 @@ export function LobbyScreen() {
       )}
 
       <HowToPlayCard />
+      </div>
     </div>
   );
 }

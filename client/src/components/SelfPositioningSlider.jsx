@@ -66,37 +66,66 @@ export function SelfPositioningSlider({ leftLabel, rightLabel, value, onChange }
     };
   }, [isDragging, handleMove]);
 
+  const thumbSizePx = 44;
+  const thumbRadius = thumbSizePx / 2;
+
   return (
     <div className="w-full">
-      <div className="flex justify-between items-center mb-4" style={{ marginBottom: 'var(--space-md)' }}>
-        <span className="text-label" style={{ color: 'var(--color-text-secondary)' }}>
+      <div
+        className="flex justify-between items-start gap-2"
+        style={{ marginBottom: 'var(--space-md)', gap: 'var(--space-sm)' }}
+      >
+        <span
+          className="dial-anchor-label"
+          style={{
+            color: 'var(--color-dial-left)',
+            flex: '0 1 48%',
+            minWidth: 0,
+            textAlign: 'left',
+            fontWeight: 500,
+          }}
+        >
           {leftLabel}
         </span>
-        <span className="text-label" style={{ color: 'var(--color-text-secondary)' }}>
+        <span
+          className="dial-anchor-label"
+          style={{
+            color: 'var(--color-dial-right)',
+            flex: '0 1 48%',
+            minWidth: 0,
+            textAlign: 'right',
+            fontWeight: 500,
+          }}
+        >
           {rightLabel}
         </span>
       </div>
-      <div
-        ref={trackRef}
-        className="relative w-full rounded-full cursor-pointer select-none touch-none"
-        style={{
-          height: '18px',
-          borderRadius: '9px',
-          background: 'linear-gradient(to right, var(--color-dial-left), var(--color-dial-right))',
-        }}
-        onPointerDown={handlePointerDown}
-      >
+      <div className="dial-track-touch items-center">
         <div
-          className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-[left] duration-200 ease-out"
+          ref={trackRef}
+          className="relative w-full rounded-full cursor-pointer select-none touch-none flex-1"
           style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '16px',
-            left: `calc(${percent * 100}% - 16px)`,
-            background: 'var(--color-dial-thumb)',
-            boxShadow: '0px 2px 12px rgba(0,0,0,0.5)',
+            height: '18px',
+            borderRadius: '9px',
+            background: 'linear-gradient(to right, var(--color-dial-left), var(--color-dial-right))',
           }}
-        />
+          onPointerDown={handlePointerDown}
+        >
+          <div
+            className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-[left] duration-200 ease-out"
+            style={{
+              width: `${thumbSizePx}px`,
+              height: `${thumbSizePx}px`,
+              borderRadius: `${thumbRadius}px`,
+              left: `calc(${percent * 100}% - ${thumbRadius}px)`,
+              background: 'var(--color-dial-thumb)',
+              boxShadow: '0px 2px 12px rgba(0,0,0,0.5)',
+            }}
+          />
+        </div>
+      </div>
+      <div className="mt-2 text-mono" style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+        Position: {value}
       </div>
     </div>
   );

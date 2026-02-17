@@ -4,7 +4,7 @@
  */
 
 import { shuffle, generateRoomCode } from './utils.js';
-import { dealHand, getCategory } from './cards.js';
+import { dealAllHandsForRound, getCategory } from './cards.js';
 
 export const PHASES = {
   LOBBY: 'LOBBY',
@@ -184,10 +184,10 @@ export function startGame(roomCode) {
   room.phase = PHASES.SELF_POSITIONING;
   room.category = room.category || 'dating';
 
-  for (const p of candidates) {
-    const cards = dealHand(room.category);
-    p.hand = buildHand(cards);
-  }
+  const hands = dealAllHandsForRound(candidates.length);
+  candidates.forEach((p, i) => {
+    p.hand = buildHand(hands[i]);
+  });
 
   return room;
 }
@@ -225,7 +225,7 @@ export function submitSelfPositioning(roomCode, playerId, positions) {
 }
 
 /**
- * Submit sabotage. deltas: [{ cardId, delta }]. Total |delta| must be 0–6. CardIds must belong to target.
+ * Submit sabotage. deltas: [{ cardId, delta }]. Total |delta| must be 0–8. CardIds must belong to target.
  */
 export function submitSabotage(roomCode, playerId, deltas) {
   const room = getRoom(roomCode);
@@ -245,7 +245,7 @@ export function submitSabotage(roomCode, playerId, deltas) {
     totalAbs += Math.abs(d);
     applied.push({ cardId, delta: d });
   }
-  if (totalAbs > 6) return null;
+  if (totalAbs > 8) return null;
 
   for (const { cardId, delta } of applied) {
     const card = target.hand.find(c => c.cardId === cardId);

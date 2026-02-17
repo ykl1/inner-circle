@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useGame } from '../context/GameContext';
 import { SabotageSlider } from '../components/SabotageSlider';
 
-const SABOTAGE_BUDGET = 6;
+const SABOTAGE_BUDGET = 8;
 
 export function SabotageScreen() {
   const { gameState, submitSabotage } = useGame();
@@ -136,7 +136,7 @@ export function SabotageScreen() {
           Sabotage {targetName}&apos;s Profile
         </h1>
         <p className="text-body text-center mb-4 max-w-sm mx-auto" style={{ color: 'var(--color-text-secondary)' }}>
-          Ruin their profile. Use your 6 points to move their dials — 1 point per position.
+          Ruin their profile. Use your 8 points to move their dials — 1 point per position.
         </p>
 
         {/* Prominent points counter: used and remaining, real-time */}

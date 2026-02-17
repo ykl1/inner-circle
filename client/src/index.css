@@ -118,6 +118,33 @@
   line-height: 1.4;
 }
 
+/* Dial card anchor labels: min 13px mobile, 14px web; wrap, never truncate */
+.dial-anchor-label {
+  font-size: 13px;
+  min-height: 1.4em;
+  line-height: 1.4;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+@media (min-width: 768px) {
+  .dial-anchor-label {
+    font-size: 14px;
+  }
+}
+
+/* Dial handle touch target: min 44px on mobile for thumb drag */
+.dial-track-touch {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+@media (min-width: 768px) {
+  .dial-track-touch {
+    min-height: 0;
+  }
+}
+
 @layer components {
   .btn {
     height: 52px;

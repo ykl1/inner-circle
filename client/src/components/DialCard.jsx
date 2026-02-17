@@ -1,6 +1,7 @@
 /**
- * Dial card: label with optional slider (0–10) or read-only position display.
- * Uses design tokens: --color-bg-card, --color-dial-*, --color-border-*, --color-text-*.
+ * Dial card: spectrum labels (left_anchor = position 1, right_anchor = position 10) with
+ * optional slider (0–10) or read-only position display. Anchors left-aligned / right-aligned
+ * and visually distinct; min 13px mobile / 14px web; wrap when long. Handle min 44px touch on mobile.
  */
 export function DialCard({
   label,
@@ -14,40 +15,74 @@ export function DialCard({
   center = true
 }) {
   const parts = (label || '').split(/\s*↔\s*/);
-  const leftAnchor = parts[0] || 'Low';
-  const rightAnchor = parts[1] || 'High';
+  const leftAnchor = (parts[0] || 'Low').trim();
+  const rightAnchor = (parts[1] || 'High').trim();
   const value = Math.max(0, Math.min(10, Number(position)));
   const centerClass = center ? 'text-center' : '';
 
+  const anchorBlock = (
+    <div
+      className="flex justify-between items-start gap-2"
+      style={{ marginBottom: 'var(--space-md)', gap: 'var(--space-sm)' }}
+    >
+      <span
+        className="dial-anchor-label"
+        style={{
+          color: 'var(--color-dial-left)',
+          flex: '0 1 48%',
+          minWidth: 0,
+          textAlign: 'left',
+          fontWeight: 500,
+        }}
+      >
+        {leftAnchor}
+      </span>
+      <span
+        className="dial-anchor-label"
+        style={{
+          color: 'var(--color-dial-right)',
+          flex: '0 1 48%',
+          minWidth: 0,
+          textAlign: 'right',
+          fontWeight: 500,
+        }}
+      >
+        {rightAnchor}
+      </span>
+    </div>
+  );
+
   if (readOnly) {
     const percent = (value / 10) * 100;
+    const thumbSize = 32;
+    const thumbOffset = thumbSize / 2;
     return (
       <div className={`card ${centerClass}`}>
-        {/* Spectrum labels on opposite ends, same layout as Build Your Date / Sabotage */}
-        <div className="flex justify-between items-center mb-4" style={{ marginBottom: 'var(--space-md)' }}>
-          <span className="text-label truncate mr-2" style={{ color: 'var(--color-text-secondary)' }}>{leftAnchor}</span>
-          <span className="text-label truncate text-right ml-2" style={{ color: 'var(--color-text-secondary)' }}>{rightAnchor}</span>
-        </div>
-        {/* Full gradient track with thumb at position so current value is visually clear */}
-        <div
-          className="relative w-full rounded-full"
-          style={{
-            height: '18px',
-            borderRadius: '9px',
-            background: 'linear-gradient(to right, var(--color-dial-left), var(--color-dial-right))',
-          }}
-        >
+        {anchorBlock}
+        <div className="dial-track-touch">
           <div
-            className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+            className="relative w-full rounded-full flex-1"
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '16px',
-              left: `calc(${percent}% - 16px)`,
-              background: 'var(--color-dial-thumb)',
-              boxShadow: '0px 2px 12px rgba(0,0,0,0.5)',
+              height: '18px',
+              borderRadius: '9px',
+              background: 'linear-gradient(to right, var(--color-dial-left), var(--color-dial-right))',
             }}
-          />
+          >
+            <div
+              className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '16px',
+                left: `calc(${percent}% - ${thumbOffset}px)`,
+                background: 'var(--color-dial-thumb)',
+                boxShadow: '0px 2px 12px rgba(0,0,0,0.5)',
+              }}
+            />
+          </div>
+        </div>
+        <div className="mt-2 text-mono" style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+          Position: {value}
         </div>
         {(selfLabel != null || finalLabel != null || deltaLabel != null) && (
           <div className={`mt-2 flex items-center justify-center text-mono text-caption ${centerClass}`} style={{ color: 'var(--color-text-secondary)' }}>
@@ -62,19 +97,21 @@ export function DialCard({
 
   return (
     <div className={`card ${centerClass}`}>
-      <div className="text-label mb-2" style={{ color: 'var(--color-text-primary)' }}>{label}</div>
-      <div className="flex items-center gap-2">
-        <span className="text-caption w-16 truncate">{leftAnchor}</span>
+      {anchorBlock}
+      <div className="dial-track-touch flex items-center gap-2">
         <input
           type="range"
           min={0}
           max={10}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 h-3 accent-brand"
-          style={{ accentColor: 'var(--color-brand)' }}
+          className="flex-1 accent-brand"
+          style={{
+            accentColor: 'var(--color-brand)',
+            minHeight: '44px',
+            touchAction: 'none',
+          }}
         />
-        <span className="text-caption w-16 truncate text-right">{rightAnchor}</span>
       </div>
       <div className={`mt-2 text-mono ${centerClass}`} style={{ color: 'var(--color-text-primary)' }}>{value}</div>
     </div>
@@ -106,10 +143,34 @@ export function SabotageMapDial({ label, selfPosition, finalPosition, sabotageAp
         borderColor: wasSabotaged ? 'rgba(196, 75, 26, 0.5)' : undefined,
       }}
     >
-      {/* Trait labels on opposite ends, same as Build Your Date / Sabotage */}
-      <div className="flex justify-between items-center mb-3" style={{ marginBottom: 'var(--space-md)' }}>
-        <span className="text-label truncate mr-2" style={{ color: 'var(--color-text-secondary)' }}>{leftAnchor}</span>
-        <span className="text-label truncate text-right ml-2" style={{ color: 'var(--color-text-secondary)' }}>{rightAnchor}</span>
+      <div
+        className="flex justify-between items-start gap-2"
+        style={{ marginBottom: 'var(--space-md)', gap: 'var(--space-sm)' }}
+      >
+        <span
+          className="dial-anchor-label"
+          style={{
+            color: 'var(--color-dial-left)',
+            flex: '0 1 48%',
+            minWidth: 0,
+            textAlign: 'left',
+            fontWeight: 500,
+          }}
+        >
+          {leftAnchor}
+        </span>
+        <span
+          className="dial-anchor-label"
+          style={{
+            color: 'var(--color-dial-right)',
+            flex: '0 1 48%',
+            minWidth: 0,
+            textAlign: 'right',
+            fontWeight: 500,
+          }}
+        >
+          {rightAnchor}
+        </span>
       </div>
 
       {/* Track: gradient bar only — no text on the bar so it stays readable */}
