@@ -218,9 +218,11 @@ export function initSocketHandlers(io) {
       if (room) {
         currentRoomCode = null;
         emitRoomUpdate(io, room);
-        setTimeout(() => {
-          cleanupRoom(room.code);
-        }, 60000);
+        const allDisconnected = room.players.every(p => !p.isConnected);
+        if (allDisconnected) {
+          const CLEANUP_DELAY_MS = 60 * 60 * 1000;
+          setTimeout(() => cleanupRoom(room.code), CLEANUP_DELAY_MS);
+        }
       }
     });
   });

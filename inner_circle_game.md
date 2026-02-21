@@ -350,4 +350,4 @@ Game content is split into:
 
 * **Pitch advance:** Only current pitcher or Founder can advance; `finish_pitch` uses `expectedIndex` for idempotency to avoid race conditions.
 * **Server API:** `GET /health`, `GET /api/categories`; all game actions go through Socket.io events.
-* **Empty rooms:** Disconnected rooms are eligible for cleanup after 60 seconds if no players are connected.
+* **Empty rooms:** When all players have disconnected, the room is eligible for cleanup after 1 hour.

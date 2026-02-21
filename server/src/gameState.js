@@ -420,7 +420,7 @@ export function playerDisconnect(playerId) {
 }
 
 /**
- * Cleanup: remove room if all players disconnected (called after 60s delay)
+ * Cleanup: remove room if all players disconnected (called after 1h delay, scheduled only when last player disconnects)
  */
 export function cleanupRoom(roomCode) {
   const code = (roomCode || '').toUpperCase();
