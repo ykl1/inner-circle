@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import compression from 'compression';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -21,10 +22,17 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(compression());
 
-// Serve static frontend files from /public
+// Serve static frontend files from /public (with cache headers for hashed assets)
 const publicPath = join(__dirname, '..', 'public');
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, {
+  setHeaders: (res, path) => {
+    if (path.includes('assets')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
 // Create HTTP server
 const httpServer = createServer(app);
